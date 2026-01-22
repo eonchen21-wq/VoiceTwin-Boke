@@ -1,0 +1,19 @@
+音频文件上传映射表
+====================================================================================================
+
+原始文件名: Last Dance-伍佰 . China Blue#9It6.mp3
+公开链接:   https://wcetamrikreimmndnemy.supabase.co/storage/v1/object/public/audio-files/6efb556af6cf4101ba91a88313ec236d.mp3
+----------------------------------------------------------------------------------------------------
+
+原始文件名: 光年之外-G.E.M.邓紫棋#eyW8s.mp3
+公开链接:   https://wcetamrikreimmndnemy.supabase.co/storage/v1/object/public/audio-files/b6ef6d95d9574628a5e64844961f44c5.mp3
+----------------------------------------------------------------------------------------------------
+
+原始文件名: 孤勇者-陈奕迅#2oMUlu.mp3
+公开链接:   https://wcetamrikreimmndnemy.supabase.co/storage/v1/object/public/audio-files/115f35f2534c4135ab126b10bce99890.mp3
+----------------------------------------------------------------------------------------------------
+
+原始文件名: 简单爱-周杰伦#930C.mp3
+公开链接:   https://wcetamrikreimmndnemy.supabase.co/storage/v1/object/public/audio-files/067da0a26e3d4df2a681f85d55e3fa6f.mp3
+----------------------------------------------------------------------------------------------------
+

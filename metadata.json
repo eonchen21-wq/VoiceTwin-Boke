@@ -1,0 +1,7 @@
+{
+  "name": "Voice Twin",
+  "description": "A deeply immersive voice analysis application that matches your unique vocal signature with famous singers. Features real-time voice visualization, spectral analysis, and personalized song recommendations.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
