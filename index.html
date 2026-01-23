@@ -1,111 +1,144 @@
 <!DOCTYPE html>
 <html lang="zh-CN" class="dark">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Voice Twin</title>
-    
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com" rel="preconnect" />
-    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=Space+Grotesk:wght@300;400;500;700&display=swap" rel="stylesheet" />
-    
-    <!-- Material Symbols -->
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
 
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-    <script>
-      tailwind.config = {
-        darkMode: "class",
-        theme: {
-          extend: {
-            colors: {
-              "primary": "#2547f4",
-              "primary-light": "#6485ff",
-              "primary-glow": "#6684FF",
-              "secondary": "#a855f7",
-              "accent-success": "#00E096",
-              "accent-warning": "#FFB946",
-              "background-dark": "#050508",
-              "surface-dark": "#12141c",
-              "surface-card": "#151926",
-            },
-            fontFamily: {
-              "display": ["Space Grotesk", "sans-serif"],
-              "body": ["Noto Sans SC", "sans-serif"],
-            },
-            backgroundImage: {
-               'studio-gradient': 'linear-gradient(to bottom, #1a103c, #050508)',
-            },
-            boxShadow: {
-                'neon': '0 0 20px rgba(37, 71, 244, 0.5)',
-                'neon-strong': '0 0 30px rgba(37, 71, 244, 0.7)',
-            }
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Voice Twin</title>
+
+  <link href="https://fonts.googleapis.com" rel="preconnect" />
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=Space+Grotesk:wght@300;400;500;700&display=swap"
+    rel="stylesheet" />
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
+    rel="stylesheet" />
+
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#2547f4",
+            "primary-light": "#6485ff",
+            "primary-glow": "#6684FF",
+            "secondary": "#a855f7",
+            "accent-purple": "#9333ea",
+            "background-dark": "#050508",
+            "surface-dark": "#12141c",
           },
+          fontFamily: {
+            "display": ["Space Grotesk", "sans-serif"],
+            "body": ["Noto Sans SC", "sans-serif"],
+          },
+          boxShadow: {
+            'neon': '0 0 20px rgba(37, 71, 244, 0.5)',
+          }
         },
+      },
+    }
+  </script>
+
+  <style>
+    /* --- A. 图标样式修正 --- */
+    .material-symbols-outlined,
+    .material-symbols-rounded {
+      font-family: 'Material Symbols Rounded';
+      font-weight: normal;
+      font-style: normal;
+      font-size: 24px;
+      line-height: 1;
+      letter-spacing: normal;
+      text-transform: none;
+      display: inline-block;
+      white-space: nowrap;
+      word-wrap: normal;
+      direction: ltr;
+      -webkit-font-feature-settings: 'liga';
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* --- B. 呼吸球 (Orb) 动画核心代码 (之前缺失的部分) --- */
+    @keyframes morph {
+      0% {
+        border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
       }
-    </script>
-    <style>
-      /* Custom Animations matching the reference */
-      @keyframes morph {
-          0% { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
-          50% { border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%; }
-          100% { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+
+      50% {
+        border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
       }
-      @keyframes deep-breathe {
-          0%, 100% { transform: scale(1); filter: brightness(1); }
-          50% { transform: scale(1.05); filter: brightness(1.2); }
+
+      100% {
+        border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
       }
-      @keyframes float-gentle {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-10px); }
+    }
+
+    @keyframes deep-breathe {
+
+      0%,
+      100% {
+        transform: scale(1);
+        filter: brightness(1);
       }
-      @keyframes halo-pulse {
-          0% { box-shadow: 0 0 0 0 rgba(37, 71, 244, 0.6); }
-          70% { box-shadow: 0 0 0 20px rgba(37, 71, 244, 0); }
-          100% { box-shadow: 0 0 0 0 rgba(37, 71, 244, 0); }
+
+      50% {
+        transform: scale(1.05);
+        filter: brightness(1.2);
       }
-      
-      .fluid-orb-core {
-          background: radial-gradient(circle at 30% 30%, #6485ff, #2547f4, #1a103c);
-          box-shadow: inset -10px -10px 20px rgba(0,0,0,0.5), 
-                      inset 10px 10px 20px rgba(255,255,255,0.4), 
-                      0 0 30px rgba(37, 71, 244, 0.4);
-          animation: morph 8s ease-in-out infinite, deep-breathe 4s ease-in-out infinite;
+    }
+
+    @keyframes float-gentle {
+
+      0%,
+      100% {
+        transform: translateY(0px);
       }
-      .fluid-orb-glow {
-          background: radial-gradient(circle, rgba(37, 71, 244, 0.6) 0%, rgba(37, 71, 244, 0) 70%);
-          filter: blur(40px);
-          animation: deep-breathe 4s ease-in-out infinite reverse;
+
+      50% {
+        transform: translateY(-10px);
       }
-      .animate-float { animation: float-gentle 4s ease-in-out infinite; }
-      .animate-float-delay-1 { animation: float-gentle 5s ease-in-out infinite 1s; }
-      .animate-float-delay-2 { animation: float-gentle 6s ease-in-out infinite 2s; }
-      .btn-halo { animation: halo-pulse 2s infinite; }
-      
-      /* Utilities */
-      .no-scrollbar::-webkit-scrollbar { display: none; }
-      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-      body {
-        min-height: 100dvh;
-        background-color: #050508;
-      }
-    </style>
-  <script type="importmap">
-{
-  "imports": {
-    "recharts": "https://esm.sh/recharts@^3.6.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
+    }
+
+    .fluid-orb-core {
+      background: radial-gradient(circle at 30% 30%, #6485ff, #2547f4, #1a103c);
+      box-shadow: inset -10px -10px 20px rgba(0, 0, 0, 0.5),
+        inset 10px 10px 20px rgba(255, 255, 255, 0.4),
+        0 0 30px rgba(37, 71, 244, 0.4);
+      animation: morph 8s ease-in-out infinite, deep-breathe 4s ease-in-out infinite;
+    }
+
+    .fluid-orb-glow {
+      background: radial-gradient(circle, rgba(37, 71, 244, 0.6) 0%, rgba(37, 71, 244, 0) 70%);
+      filter: blur(40px);
+      animation: deep-breathe 4s ease-in-out infinite reverse;
+    }
+
+    /* --- C. 基础样式 --- */
+    body {
+      min-height: 100dvh;
+      background-color: #050508;
+      color: white;
+      margin: 0;
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
 </head>
-  <body>
-    <div id="root"></div>
+
+<body>
+  <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>
+
 </html>
