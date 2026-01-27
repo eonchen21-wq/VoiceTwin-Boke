@@ -165,7 +165,7 @@ const App: React.FC = () => {
                         data={analysisResult}
                         onBack={handleRetake}
                         favoriteSongs={favoriteSongs}
-                        allSongs={allSongs}
+                        allSongs={analysisResult?.recommendedSongs || []}
                         onToggleFavorite={handleToggleFavorite}
                         userAvatarUrl={userAvatar}
                     />

@@ -11,6 +11,7 @@ export interface AnalysisData {
         avatarUrl: string;
     };
     userAvatarUrl: string;
+    recommendedSongs?: any[]; // 新增：推荐歌曲列表
 }
 
 /**
@@ -36,6 +37,32 @@ class AnalysisService {
         // 转换后端响应格式为前端格式
         const backendData = response.data;
 
+        // 提取并转换推荐歌曲数据
+        const comfortSongs = (backendData.recommended_songs_comfort || []).map((song: any) => ({
+            id: song.id,
+            title: song.title,
+            artist: song.artist,
+            album: song.album || '',
+            coverUrl: song.cover_url || '',
+            songUrl: song.song_url,
+            tag: 'comfort' as const,
+            tagLabel: song.tag_label || '推荐'
+        }));
+
+        const challengeSongs = (backendData.recommended_songs_challenge || []).map((song: any) => ({
+            id: song.id,
+            title: song.title,
+            artist: song.artist,
+            album: song.album || '',
+            coverUrl: song.cover_url || '',
+            songUrl: song.song_url,
+            tag: 'challenge' as const,
+            tagLabel: song.tag_label || '推荐'
+        }));
+
+        // 合并推荐歌曲
+        const recommendedSongs = [...comfortSongs, ...challengeSongs];
+
         return {
             score: backendData.score,
             clarity: backendData.clarity,
@@ -51,7 +78,8 @@ class AnalysisService {
                 description: backendData.matched_singer.description,
                 avatarUrl: backendData.matched_singer.avatar_url
             },
-            userAvatarUrl: backendData.user_avatar_url || localStorage.getItem('user_avatar') || ''
+            userAvatarUrl: backendData.user_avatar_url || localStorage.getItem('user_avatar') || '',
+            recommendedSongs // 新增：推荐歌曲列表
         };
     }
 

@@ -14,6 +14,30 @@ interface MatchResultViewProps {
 // Demo audio URL for preview functionality
 const DEMO_AUDIO_URL = "https://p.scdn.co/mp3-preview/3eb16018c2a700232a929cd09deb8e81fb19aa6d?cid=774b29d4f13844c495f206cafdad9c86";
 
+/**
+ * 根据标签文本返回对应的样式类
+ * @param tagLabel 标签文本（如"完美契合"、"非常契合"等）
+ * @returns Tailwind CSS 类名字符串
+ */
+const getTagStyle = (tagLabel: string): string => {
+    switch (tagLabel) {
+        case '完美契合':
+            return 'text-emerald-400 bg-emerald-400/10';
+        case '非常契合':
+            return 'text-blue-400 bg-blue-400/10';
+        case '比较合适':
+            return 'text-cyan-400 bg-cyan-400/10';
+        case '有点挑战':
+            return 'text-purple-400 bg-purple-400/10';
+        case '极具挑战':
+            return 'text-amber-400 bg-amber-400/10';
+        case '高难挑战':
+            return 'text-orange-500 bg-orange-500/10';
+        default:
+            return 'text-slate-400 bg-slate-400/10';
+    }
+};
+
 const MatchResultView: React.FC<MatchResultViewProps> = ({ onBack, data, favoriteSongs, allSongs, onToggleFavorite, userAvatarUrl }) => {
     // NOTE: 动态搜索跳转到网易云音乐（规避版权风险，无需手动维护链接）
     const handleOpenInNetease = (song: Song) => {
@@ -243,7 +267,7 @@ const MatchResultView: React.FC<MatchResultViewProps> = ({ onBack, data, favorit
                         </div>
 
                         <div className="h-[240px] w-full relative z-10">
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={200}>
                                 <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data.radarData}>
                                     <PolarGrid stroke="rgba(255,255,255,0.1)" />
                                     <PolarAngleAxis dataKey="subject" tick={{ fill: '#cbd5e1', fontSize: 10, fontFamily: 'Noto Sans SC' }} />
@@ -265,8 +289,8 @@ const MatchResultView: React.FC<MatchResultViewProps> = ({ onBack, data, favorit
                     <div>
                         <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-2">
-                                <div className="flex items-center justify-center size-8 rounded bg-accent-success/20">
-                                    <span className="material-symbols-outlined text-accent-success text-[20px]">verified</span>
+                                <div className="flex items-center justify-center size-8 rounded-lg bg-emerald-500/20">
+                                    <span className="material-symbols-outlined text-emerald-400 text-[20px]">verified</span>
                                 </div>
                                 <h3 className="text-lg font-bold text-white font-body">舒适区</h3>
                                 <span className="text-[10px] text-slate-400 font-medium tracking-wide font-display">COMFORT ZONE</span>
@@ -274,8 +298,8 @@ const MatchResultView: React.FC<MatchResultViewProps> = ({ onBack, data, favorit
                         </div>
                         <div className="flex flex-col gap-3">
                             {allSongs.filter(s => s.tag === 'comfort').map(song => (
-                                <div key={song.id} className="group relative flex items-center gap-4 bg-surface-dark p-3 rounded-xl border-l-4 border-l-accent-success border-y border-r border-y-white/5 border-r-white/5 hover:bg-[#1E2436] transition-all cursor-pointer overflow-hidden">
-                                    <div className="absolute inset-0 bg-gradient-to-r from-accent-success/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                <div key={song.id} className="group relative flex items-center gap-4 bg-surface-dark p-3 rounded-2xl border-l-[3px] border-l-emerald-400 hover:bg-[#1E2436] hover:shadow-[0_0_20px_rgba(52,211,153,0.2)] transition-all cursor-pointer overflow-hidden">
+                                    <div className="absolute inset-0 bg-gradient-to-r from-emerald-400/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                     <div className="relative size-14 shrink-0 rounded-lg overflow-hidden bg-slate-800 shadow-md">
                                         <img alt={song.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" src={song.coverUrl} />
                                     </div>
@@ -284,7 +308,7 @@ const MatchResultView: React.FC<MatchResultViewProps> = ({ onBack, data, favorit
                                         <p className="text-slate-400 text-xs truncate mt-0.5 font-body">{song.artist} • {song.album}</p>
                                     </div>
                                     <div className="flex flex-col items-end gap-1.5 z-10">
-                                        <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded font-body ${song.tagLabel === '完美契合' ? 'text-accent-success bg-accent-success/10' : 'text-primary-glow bg-primary/10'}`}>
+                                        <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded font-body ${getTagStyle(song.tagLabel)}`}>
                                             {song.tagLabel}
                                         </span>
                                         <div className="flex items-center gap-2">
@@ -325,8 +349,8 @@ const MatchResultView: React.FC<MatchResultViewProps> = ({ onBack, data, favorit
                     <div>
                         <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-2">
-                                <div className="flex items-center justify-center size-8 rounded bg-accent-warning/20">
-                                    <span className="material-symbols-outlined text-accent-warning text-[20px]">local_fire_department</span>
+                                <div className="flex items-center justify-center size-8 rounded-lg bg-amber-500/20">
+                                    <span className="material-symbols-outlined text-amber-400 text-[20px]">local_fire_department</span>
                                 </div>
                                 <h3 className="text-lg font-bold text-white font-body">挑战区</h3>
                                 <span className="text-[10px] text-slate-400 font-medium tracking-wide font-display">CHALLENGE MODE</span>
@@ -334,8 +358,8 @@ const MatchResultView: React.FC<MatchResultViewProps> = ({ onBack, data, favorit
                         </div>
                         <div className="flex flex-col gap-3">
                             {allSongs.filter(s => s.tag === 'challenge').map(song => (
-                                <div key={song.id} className="group relative flex items-center gap-4 bg-surface-dark p-3 rounded-xl border-l-4 border-l-accent-warning border-y border-r border-y-white/5 border-r-white/5 hover:bg-[#1E2436] transition-all cursor-pointer overflow-hidden">
-                                    <div className="absolute inset-0 bg-gradient-to-r from-accent-warning/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                <div key={song.id} className="group relative flex items-center gap-4 bg-surface-dark p-3 rounded-2xl border-l-[3px] border-l-amber-500 hover:bg-[#1E2436] hover:shadow-[0_0_20px_rgba(251,146,60,0.2)] transition-all cursor-pointer overflow-hidden">
+                                    <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                     <div className="relative size-14 shrink-0 rounded-lg overflow-hidden bg-slate-800 shadow-md">
                                         <img alt={song.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" src={song.coverUrl} />
                                     </div>
@@ -344,7 +368,7 @@ const MatchResultView: React.FC<MatchResultViewProps> = ({ onBack, data, favorit
                                         <p className="text-slate-400 text-xs truncate mt-0.5 font-body">{song.artist} • {song.album}</p>
                                     </div>
                                     <div className="flex flex-col items-end gap-1.5 z-10">
-                                        <span className="text-[10px] font-bold uppercase text-accent-warning bg-accent-warning/10 px-2 py-0.5 rounded font-body">
+                                        <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded font-body ${getTagStyle(song.tagLabel)}`}>
                                             {song.tagLabel}
                                         </span>
                                         <div className="flex items-center gap-2">

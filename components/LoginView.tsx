@@ -144,7 +144,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
 
                         {/* 2. 邮箱输入框 */}
                         <div className="space-y-2">
-                            <label className="text-xs font-medium text-gray-400 ml-1">账号 (邮箱)</label>
+                            <label className="text-xs font-medium text-gray-400 ml-1">账号</label>
                             <div className="group flex items-center w-full rounded-xl bg-[#1a1d2d]/80 border border-white/5 focus-within:border-[#2547f4]/60 focus-within:shadow-[0_0_15px_rgba(37,71,244,0.3)] transition-all duration-300">
                                 <div className="pl-4 pr-3 text-gray-400 group-focus-within:text-[#2547f4] transition-colors">
                                     <span className="material-symbols-outlined text-[20px]">mail</span>

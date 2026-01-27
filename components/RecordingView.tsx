@@ -371,23 +371,23 @@ const RecordingView: React.FC<RecordingViewProps> = ({ onAnalysisComplete, userA
 
                 {/* Real-time Stats */}
                 <div className="grid grid-cols-2 gap-3 w-full mb-8">
-                    <div className="bg-white/5 rounded-lg p-3 border border-white/5 backdrop-blur-sm">
-                        <div className="text-white/40 text-xs font-medium uppercase tracking-wider mb-1 font-body">清晰度</div>
-                        <div ref={clarityValueRef} className="text-white text-lg font-bold font-body">准备中</div>
-                        <div className="w-full bg-white/10 rounded-full h-1 mt-2">
+                    <div className="bg-white/5 rounded-xl p-4 border border-white/5 backdrop-blur-sm">
+                        <div className="text-white/40 text-xs font-medium uppercase tracking-wider mb-2 font-body">清晰度</div>
+                        <div ref={clarityValueRef} className="text-white text-2xl font-bold font-body mb-3">准备中</div>
+                        <div className="w-full bg-gradient-to-r from-slate-800/50 to-slate-700/30 rounded-full h-2 overflow-hidden">
                             <div
                                 ref={clarityBarRef}
-                                className="bg-primary h-1 rounded-full w-0 shadow-[0_0_10px_rgba(37,71,244,0.5)] transition-[width] duration-100 ease-linear"
+                                className="bg-gradient-to-r from-blue-600 to-blue-400 h-2 rounded-full w-0 shadow-[0_0_15px_rgba(59,130,246,0.8)] transition-[width] duration-100 ease-linear"
                             ></div>
                         </div>
                     </div>
-                    <div className="bg-white/5 rounded-lg p-3 border border-white/5 backdrop-blur-sm">
-                        <div className="text-white/40 text-xs font-medium uppercase tracking-wider mb-1 font-body">稳定性</div>
-                        <div ref={stabilityValueRef} className="text-white text-lg font-bold font-display">0%</div>
-                        <div className="w-full bg-white/10 rounded-full h-1 mt-2">
+                    <div className="bg-white/5 rounded-xl p-4 border border-white/5 backdrop-blur-sm">
+                        <div className="text-white/40 text-xs font-medium uppercase tracking-wider mb-2 font-body">稳定性</div>
+                        <div ref={stabilityValueRef} className="text-white text-2xl font-bold font-display mb-3">0%</div>
+                        <div className="w-full bg-gradient-to-r from-slate-800/50 to-slate-700/30 rounded-full h-2 overflow-hidden">
                             <div
                                 ref={stabilityBarRef}
-                                className="bg-accent-success h-1 rounded-full w-0 shadow-[0_0_10px_rgba(52,211,153,0.5)] transition-[width] duration-100 ease-linear"
+                                className="bg-gradient-to-r from-emerald-600 to-emerald-400 h-2 rounded-full w-0 shadow-[0_0_15px_rgba(16,185,129,0.8)] transition-[width] duration-100 ease-linear"
                             ></div>
                         </div>
                     </div>

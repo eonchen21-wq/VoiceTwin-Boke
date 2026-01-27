@@ -135,7 +135,7 @@ class AnalysisService:
         final_challenge_list = challenge_songs_raw[:5]
         logger.info(f"✅ 挑战区推荐: {len(final_challenge_list)}首")
         
-        # 3.3 构建列表并自动配图
+        # 3.3 构建列表并自动配图（动态标签生成）
         recommended_comfort = []
         for song in final_comfort_list:
             cover = song.get('cover_url')
@@ -143,13 +143,36 @@ class AnalysisService:
                 # 如果没有封面，自动生成
                 cover = await AIImageService.generate_song_cover(song.get('title'))
             
+            # 计算该歌曲与用户声音的相似度
+            song_similarity = 0
+            if song.get('feature_vector'):
+                try:
+                    song_similarity = AudioAnalyzer.calculate_cosine_similarity(
+                        user_feature_vector, song['feature_vector']
+                    )
+                except:
+                    song_similarity = 0.75  # 默认值
+            else:
+                song_similarity = 0.75  # 无特征向量时使用默认值
+            
+            # 根据相似度生成动态标签
+            if song_similarity >= 0.90:
+                tag_label = "完美契合"
+            elif song_similarity >= 0.80:
+                tag_label = "非常契合"
+            else:
+                tag_label = "比较合适"
+            
+            similarity_score = int(song_similarity * 100)
+            
             recommended_comfort.append(RecommendedSongResponse(
                 id=song['id'],
                 title=song.get('title', '未知'),
                 artist=song.get('artist', ''),
                 cover_url=cover, 
-                similarity_score=85,
-                difficulty_level="comfortable"
+                similarity_score=similarity_score,
+                difficulty_level="comfortable",
+                tag_label=tag_label
             ))
 
         recommended_challenge = []
@@ -158,14 +181,37 @@ class AnalysisService:
             if not cover:
                 # 如果没有封面，自动生成
                 cover = await AIImageService.generate_song_cover(song.get('title'))
+            
+            # 计算该歌曲与用户声音的相似度
+            song_similarity = 0
+            if song.get('feature_vector'):
+                try:
+                    song_similarity = AudioAnalyzer.calculate_cosine_similarity(
+                        user_feature_vector, song['feature_vector']
+                    )
+                except:
+                    song_similarity = 0.55  # 默认值
+            else:
+                song_similarity = 0.55  # 无特征向量时使用默认值
+            
+            # 根据相似度生成动态标签（挑战区歌曲相似度较低）
+            if song_similarity >= 0.70:
+                tag_label = "有点挑战"
+            elif song_similarity >= 0.50:
+                tag_label = "极具挑战"
+            else:
+                tag_label = "高难挑战"
+            
+            similarity_score = int(song_similarity * 100)
                 
             recommended_challenge.append(RecommendedSongResponse(
                 id=song['id'],
                 title=song.get('title', '未知'),
                 artist=song.get('artist', ''),
                 cover_url=cover,
-                similarity_score=60,
-                difficulty_level="challenge"
+                similarity_score=similarity_score,
+                difficulty_level="challenge",
+                tag_label=tag_label
             ))
         
         # ==================== 4. 返回结果 ====================

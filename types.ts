@@ -37,4 +37,5 @@ export interface AnalysisData {
         avatarUrl: string;
     };
     userAvatarUrl: string;
+    recommendedSongs?: Song[]; // 新增：推荐歌曲列表
 }

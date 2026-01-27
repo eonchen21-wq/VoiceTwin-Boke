@@ -51,6 +51,7 @@ class RecommendedSongResponse(BaseModel):
     cover_url: str | None = None
     similarity_score: int = Field(..., ge=0, le=100, description="与用户声音的相似度")
     difficulty_level: str = Field(..., description="难度级别: comfortable 或 challenge")
+    tag_label: str = Field(default="推荐", description="匹配度标签：完美契合、非常契合、比较合适、极具挑战等")
 
 
 class VoiceAnalysisResponse(BaseModel):
