@@ -17,7 +17,7 @@ class AIImageService:
     BASE_DIR = os.path.dirname(CURRENT_DIR)
     AVATAR_DIR = os.path.join(BASE_DIR, "static", "avatars")
     
-    BASE_URL = "http://localhost:8000"
+    BASE_URL = "https://voicetwin-boke.onrender.com"
 
     # 支持的本地图片扩展名
     EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".JPG", ".PNG", ".JPEG"]
