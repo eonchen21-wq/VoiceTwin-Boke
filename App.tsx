@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import Layout from './components/Layout';
 import LoginView from './components/LoginView';
 import RecordingView from './components/RecordingView';
@@ -190,6 +191,7 @@ const App: React.FC = () => {
     return (
         <Layout currentView={currentView} onNavigate={handleNavigation}>
             {renderView()}
+            <Analytics />
         </Layout>
     );
 };
