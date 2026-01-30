@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import authService from '../services/auth-service';
+import apiClient from '../api-client';
 
 /**
  * 密码重置页面
@@ -14,18 +14,28 @@ const UpdatePassword: React.FC = () => {
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [accessToken, setAccessToken] = useState<string>(''); // NOTE: 从 URL 提取的 access_token
     const navigate = useNavigate();
 
     useEffect(() => {
-        // NOTE: 检查是否通过重置链接访问
-        // Supabase 会自动处理 URL 中的认证 token
-        const checkAuth = async () => {
-            const user = await authService.getCurrentUser();
-            if (!user) {
+        // NOTE: 从 URL hash 中提取 access_token
+        // Supabase 重置邮件会在 URL 中包含: #access_token=xxx&refresh_token=yyy&...
+        const hash = window.location.hash;
+        if (hash) {
+            const params = new URLSearchParams(hash.substring(1)); // 去掉 # 号
+            const token = params.get('access_token');
+
+            if (token) {
+                setAccessToken(token);
+                console.log('✅ 成功从 URL 提取 access_token');
+            } else {
                 setError('无效的重置链接，请重新申请密码重置');
+                console.error('❌ URL 中未找到 access_token');
             }
-        };
-        checkAuth();
+        } else {
+            setError('无效的重置链接，请重新申请密码重置');
+            console.error('❌ URL 中没有 hash 参数');
+        }
     }, []);
 
     // --- 密码更新业务逻辑 ---
@@ -34,19 +44,25 @@ const UpdatePassword: React.FC = () => {
         setError('');
         setMessage('');
 
-        // 1. 基础验证
+        // 1. 检查 access_token
+        if (!accessToken) {
+            setError('无效的重置链接，请重新申请密码重置');
+            return;
+        }
+
+        // 2. 基础验证
         if (!newPassword.trim() || !confirmPassword.trim()) {
             setError('请输入新密码');
             return;
         }
 
-        // 2. 密码一致性验证
+        // 3. 密码一致性验证
         if (newPassword !== confirmPassword) {
             setError('两次输入的密码不一致');
             return;
         }
 
-        // 3. 密码强度验证
+        // 4. 密码强度验证
         if (newPassword.length < 6) {
             setError('密码长度至少为 6 个字符');
             return;
@@ -54,7 +70,12 @@ const UpdatePassword: React.FC = () => {
 
         setIsLoading(true);
         try {
-            await authService.updatePassword(newPassword);
+            // NOTE: 调用后端 API 而非直接调用 Supabase，解决国内访问超时问题
+            await apiClient.post('/auth/update-password', {
+                access_token: accessToken,
+                new_password: newPassword
+            });
+
             setMessage('密码更新成功！正在跳转...');
             // 2 秒后跳转到首页
             setTimeout(() => {
@@ -62,7 +83,8 @@ const UpdatePassword: React.FC = () => {
             }, 2000);
         } catch (err: any) {
             console.error(err);
-            setError(err.message || '密码更新失败，请稍后重试');
+            const errorMsg = err.response?.data?.detail || err.message || '密码更新失败，请稍后重试';
+            setError(errorMsg);
         } finally {
             setIsLoading(false);
         }

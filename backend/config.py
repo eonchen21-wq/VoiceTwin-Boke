@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_key: str
     supabase_jwt_secret: str
+    supabase_service_role_key: str  # NOTE: Admin API 专用 key，用于后端操作
     
     # API 配置
     api_host: str = "0.0.0.0"

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel  # ✅ 新增：用于接收前端请求体
 from config import get_settings
+from supabase import create_client, Client
 
 # ✅ 关键修改：添加 prefix="/api/auth"，确保路由地址正确
 # 这样前端请求 /api/auth/create-profile 时才能找到这个文件里的接口
@@ -69,6 +70,16 @@ class CreateProfileRequest(BaseModel):
     class Config:
         extra = "allow"  # 允许接收任何字段，不报错
 
+# ==================== 3. 密码更新代理接口 ====================
+
+class UpdatePasswordRequest(BaseModel):
+    """
+    密码更新请求模型
+    NOTE: access_token 用于验证用户身份并提取 user_id
+    """
+    access_token: str
+    new_password: str
+
 @router.post("/create-profile")
 async def create_profile(request: CreateProfileRequest):
     """
@@ -82,3 +93,93 @@ async def create_profile(request: CreateProfileRequest):
     # 这里不需要做任何数据库操作，因为 Trigger 已经做完了
     logger.info("收到前端 create-profile 请求，返回成功信号")
     return {"status": "success", "message": "Profile synced via DB trigger"}
+
+
+@router.post("/update-password")
+async def update_password(request: UpdatePasswordRequest):
+    """
+    通过后端代理更新用户密码
+    
+    背景：
+    国内访问 Supabase 不稳定，前端直接调用 supabase.auth.updateUser 经常超时。
+    通过后端代理使用 Admin API 更新密码，绕过网络问题。
+    
+    流程：
+    1. 从 access_token 解析 user_id
+    2. 使用 Supabase Admin API 更新密码
+    3. 返回成功状态
+    """
+    try:
+        # 1. 从 access_token 解析 user_id
+        payload = jwt.decode(
+            request.access_token,
+            options={
+                "verify_signature": False,  # 跳过签名验证（因为是 Supabase 签发的）
+                "verify_exp": True,         # 验证过期时间
+                "verify_aud": False
+            }
+        )
+        
+        user_id = payload.get("sub")
+        if not user_id:
+            logger.error("❌ Token 有效但缺少 user_id")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid token: missing user_id"
+            )
+        
+        # 2. 密码强度验证
+        if len(request.new_password) < 6:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="密码长度至少为 6 个字符"
+            )
+        
+        # 3. 使用 Admin API 更新密码
+        settings = get_settings()
+        
+        # NOTE: 使用 service_role_key 创建 Admin 客户端
+        admin_client: Client = create_client(
+            settings.supabase_url,
+            settings.supabase_service_role_key  # 使用 service_role key
+        )
+        
+        # 调用 Admin API 更新用户密码
+        response = admin_client.auth.admin.update_user_by_id(
+            user_id,
+            {"password": request.new_password}
+        )
+        
+        if response.user:
+            logger.info(f"✅ 用户 {user_id[:8]}... 密码已成功更新")
+            return {
+                "status": "success",
+                "message": "密码更新成功"
+            }
+        else:
+            logger.error(f"❌ 密码更新失败: 未知错误")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="密码更新失败"
+            )
+    
+    except jwt.ExpiredSignatureError:
+        logger.warning("⚠️ Token 已过期")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="重置链接已过期，请重新申请密码重置"
+        )
+    
+    except jwt.InvalidTokenError as e:
+        logger.error(f"❌ Token 验证失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的重置链接"
+        )
+    
+    except Exception as e:
+        logger.error(f"❌ 密码更新失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"密码更新失败: {str(e)}"
+        )
