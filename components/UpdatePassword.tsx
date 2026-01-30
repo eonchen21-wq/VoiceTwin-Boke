@@ -71,7 +71,8 @@ const UpdatePassword: React.FC = () => {
         setIsLoading(true);
         try {
             // NOTE: 调用后端 API 而非直接调用 Supabase，解决国内访问超时问题
-            await apiClient.post('/auth/update-password', {
+            // FIXME: 必须使用 /api 前缀才能匹配后端路由
+            await apiClient.post('/api/auth/update-password', {
                 access_token: accessToken,
                 new_password: newPassword
             });
