@@ -190,10 +190,10 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
 
                             {/* 标题 */}
                             <div className="space-y-2">
-                                <h3 className="text-2xl font-bold text-white">注册确认邮件已发送！</h3>
+                                <h3 className="text-2xl font-bold text-white">验证邮件已发送</h3>
                                 <div className="space-y-3 text-gray-300">
-                                    <p>我们已向 <span className="font-bold text-blue-400">{registeredEmail}</span> 发送了一封验证邮件。</p>
-                                    <p className="text-sm">请前往您的邮箱点击链接激活账号，然后返回登录。</p>
+                                    <p>为了保障您的账号安全，我们已向 <span className="font-bold text-blue-400">{registeredEmail}</span> 发送了一封激活邮件。</p>
+                                    <p className="text-sm">请查收邮件并点击链接激活账号，随后即可登录使用。</p>
                                 </div>
                             </div>
 

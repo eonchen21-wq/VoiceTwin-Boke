@@ -45,16 +45,19 @@ class AuthService {
                 username: username
             });
 
-            // NOTE: 保存 JWT token 而非 user.id，确保认证安全
+            // NOTE: 开启邮箱验证时，注册成功不会返回 session（正常行为）
+            // 只有在有 session 时才保存 token
             if (authData.session?.access_token) {
                 localStorage.setItem('auth_token', authData.session.access_token);
-                // 同时保存用户 ID 用于其他用途
                 localStorage.setItem('user_id', authData.user.id);
-            } else {
-                throw new Error('注册成功但未获取到 session token');
             }
+            // 如果没有 session，说明需要邮箱验证，这是正常的
 
-            return response.data;
+            return {
+                user: authData.user,
+                session: authData.session,
+                emailConfirmationRequired: !authData.session  // 是否需要邮箱验证
+            };
         } catch (error) {
             console.error('创建用户资料失败:', error);
             throw error;
