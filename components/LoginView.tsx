@@ -14,6 +14,8 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [isRegistering, setIsRegistering] = useState(false);
+    const [isForgotPassword, setIsForgotPassword] = useState(false);
+    const [resetEmail, setResetEmail] = useState('');
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -75,10 +77,43 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
 
     const toggleMode = () => {
         setIsRegistering(!isRegistering);
+        setIsForgotPassword(false);
         setError('');
         setMessage('');
         setPassword('');
         setConfirmPassword('');
+        setResetEmail('');
+    };
+
+    // --- 忘记密码业务逻辑 ---
+    const handleForgotPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        setMessage('');
+
+        // 验证邮箱格式
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(resetEmail)) {
+            setError('请输入有效的邮箱地址');
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            await authService.resetPasswordForEmail(resetEmail);
+            setMessage('重置邮件已发送，请检查收件箱');
+            // 3 秒后自动返回登录页面
+            setTimeout(() => {
+                setIsForgotPassword(false);
+                setResetEmail('');
+                setMessage('');
+            }, 3000);
+        } catch (err: any) {
+            console.error(err);
+            setError(err.message || '发送失败，请稍后重试');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -105,10 +140,10 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                     </div>
                     <div className="space-y-2">
                         <h1 className="text-4xl font-bold tracking-tight text-white drop-shadow-[0_0_10px_rgba(37,71,244,0.5)]">
-                            {isRegistering ? '创建账号' : '欢迎回来'}
+                            {isForgotPassword ? '重置密码' : isRegistering ? '创建账号' : '欢迎回来'}
                         </h1>
                         <h2 className="text-xl font-medium tracking-tight text-white/90">
-                            {isRegistering ? '开启你的' : '发现你的'} <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">声音双胞胎</span>
+                            {isForgotPassword ? '找回你的账号' : isRegistering ? '开启你的' : '发现你的'} <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">声音双胞胎</span>
                         </h2>
                     </div>
                 </div>
@@ -121,130 +156,213 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                         boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.36)'
                     }}
                 >
-                    <form onSubmit={handleAuth} className="space-y-5">
-
-                        {/* 1. 用户名输入框 */}
-                        {isRegistering && (
-                            <div className="space-y-2 animate-fadeIn">
-                                <label className="text-xs font-medium text-gray-400 ml-1">用户名</label>
+                    {/* --- 忘记密码表单 --- */}
+                    {isForgotPassword ? (
+                        <form onSubmit={handleForgotPassword} className="space-y-5">
+                            {/* 邮箱输入框 */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-gray-400 ml-1">注册邮箱</label>
                                 <div className="group flex items-center w-full rounded-xl bg-[#1a1d2d]/80 border border-white/5 focus-within:border-[#2547f4]/60 focus-within:shadow-[0_0_15px_rgba(37,71,244,0.3)] transition-all duration-300">
                                     <div className="pl-4 pr-3 text-gray-400 group-focus-within:text-[#2547f4] transition-colors">
-                                        <span className="material-symbols-outlined text-[20px]">person</span>
+                                        <span className="material-symbols-outlined text-[20px]">mail</span>
                                     </div>
                                     <input
-                                        type="text"
-                                        value={username}
-                                        onChange={(e) => setUsername(e.target.value)}
+                                        type="email"
+                                        value={resetEmail}
+                                        onChange={(e) => setResetEmail(e.target.value)}
                                         className="w-full bg-transparent border-none text-white placeholder-gray-500/80 focus:ring-0 h-12 py-3 pl-0 pr-4 text-sm outline-none"
-                                        placeholder="请输入用户名"
+                                        placeholder="name@example.com"
                                     />
                                 </div>
                             </div>
-                        )}
 
-                        {/* 2. 邮箱输入框 */}
-                        <div className="space-y-2">
-                            <label className="text-xs font-medium text-gray-400 ml-1">账号</label>
-                            <div className="group flex items-center w-full rounded-xl bg-[#1a1d2d]/80 border border-white/5 focus-within:border-[#2547f4]/60 focus-within:shadow-[0_0_15px_rgba(37,71,244,0.3)] transition-all duration-300">
-                                <div className="pl-4 pr-3 text-gray-400 group-focus-within:text-[#2547f4] transition-colors">
-                                    <span className="material-symbols-outlined text-[20px]">mail</span>
+                            {/* 消息提示区 */}
+                            {error && (
+                                <div className="text-red-400 text-xs text-center bg-red-500/10 py-2 rounded-lg border border-red-500/20 animate-pulse">
+                                    {error}
                                 </div>
-                                <input
-                                    type="email"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    className="w-full bg-transparent border-none text-white placeholder-gray-500/80 focus:ring-0 h-12 py-3 pl-0 pr-4 text-sm outline-none"
-                                    placeholder="name@example.com"
-                                />
-                            </div>
-                        </div>
+                            )}
+                            {message && (
+                                <div className="text-green-400 text-xs text-center bg-green-500/10 py-2 rounded-lg border border-green-500/20">
+                                    {message}
+                                </div>
+                            )}
 
-                        {/* 3. 密码输入框 */}
-                        <div className="space-y-2">
-                            <label className="text-xs font-medium text-gray-400 ml-1">密码</label>
-                            <div className="group flex items-center w-full rounded-xl bg-[#1a1d2d]/80 border border-white/5 focus-within:border-[#2547f4]/60 focus-within:shadow-[0_0_15px_rgba(37,71,244,0.3)] transition-all duration-300">
-                                <div className="pl-4 pr-3 text-gray-400 group-focus-within:text-[#2547f4] transition-colors">
-                                    <span className="material-symbols-outlined text-[20px]">lock</span>
-                                </div>
-                                <input
-                                    type={showPassword ? "text" : "password"}
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full bg-transparent border-none text-white placeholder-gray-500/80 focus:ring-0 h-12 py-3 pl-0 pr-4 text-sm outline-none"
-                                    placeholder="请输入密码"
-                                />
+                            {/* 发送按钮 */}
+                            <button
+                                type="submit"
+                                disabled={isLoading}
+                                className="relative w-full overflow-hidden rounded-xl group h-14 shadow-[0_4px_20px_rgba(37,71,244,0.3)] hover:shadow-[0_4px_25px_rgba(37,71,244,0.5)] transition-all duration-300 transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed mt-2"
+                            >
+                                <div className="absolute inset-0 bg-gradient-to-r from-[#2547f4] to-[#9333ea] transition-all duration-300 group-hover:scale-105"></div>
+                                <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors"></div>
+                                <span className="relative flex items-center justify-center gap-2 text-white font-bold text-base tracking-wide">
+                                    {isLoading ? '发送中...' : '发送重置邮件'}
+                                    {!isLoading && (
+                                        <span className="material-symbols-outlined text-[18px] mt-[2px]">send</span>
+                                    )}
+                                </span>
+                            </button>
+
+                            {/* 返回登录 */}
+                            <div className="flex justify-center items-center pt-2">
                                 <button
                                     type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="pr-4 pl-2 text-gray-500 hover:text-white transition-colors focus:outline-none flex items-center"
+                                    onClick={() => {
+                                        setIsForgotPassword(false);
+                                        setResetEmail('');
+                                        setError('');
+                                        setMessage('');
+                                    }}
+                                    className="text-sm text-gray-500 hover:text-white transition-colors"
                                 >
-                                    <span className="material-symbols-outlined text-[20px]">
-                                        {showPassword ? 'visibility' : 'visibility_off'}
+                                    <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 hover:opacity-80 transition-opacity cursor-pointer">
+                                        ← 返回登录
                                     </span>
                                 </button>
                             </div>
-                        </div>
+                        </form>
+                    ) : (
+                        <form onSubmit={handleAuth} className="space-y-5">
 
-                        {/* 4. 确认密码 */}
-                        {isRegistering && (
-                            <div className="space-y-2 animate-fadeIn">
-                                <label className="text-xs font-medium text-gray-400 ml-1">确认密码</label>
+                            {/* 1. 用户名输入框 */}
+                            {isRegistering && (
+                                <div className="space-y-2 animate-fadeIn">
+                                    <label className="text-xs font-medium text-gray-400 ml-1">用户名</label>
+                                    <div className="group flex items-center w-full rounded-xl bg-[#1a1d2d]/80 border border-white/5 focus-within:border-[#2547f4]/60 focus-within:shadow-[0_0_15px_rgba(37,71,244,0.3)] transition-all duration-300">
+                                        <div className="pl-4 pr-3 text-gray-400 group-focus-within:text-[#2547f4] transition-colors">
+                                            <span className="material-symbols-outlined text-[20px]">person</span>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            value={username}
+                                            onChange={(e) => setUsername(e.target.value)}
+                                            className="w-full bg-transparent border-none text-white placeholder-gray-500/80 focus:ring-0 h-12 py-3 pl-0 pr-4 text-sm outline-none"
+                                            placeholder="请输入用户名"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* 2. 邮箱输入框 */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-gray-400 ml-1">账号</label>
                                 <div className="group flex items-center w-full rounded-xl bg-[#1a1d2d]/80 border border-white/5 focus-within:border-[#2547f4]/60 focus-within:shadow-[0_0_15px_rgba(37,71,244,0.3)] transition-all duration-300">
                                     <div className="pl-4 pr-3 text-gray-400 group-focus-within:text-[#2547f4] transition-colors">
-                                        <span className="material-symbols-outlined text-[20px]">check_circle</span>
+                                        <span className="material-symbols-outlined text-[20px]">mail</span>
                                     </div>
                                     <input
-                                        type={showPassword ? "text" : "password"}
-                                        value={confirmPassword}
-                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        type="email"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
                                         className="w-full bg-transparent border-none text-white placeholder-gray-500/80 focus:ring-0 h-12 py-3 pl-0 pr-4 text-sm outline-none"
-                                        placeholder="请再次输入密码"
+                                        placeholder="name@example.com"
                                     />
                                 </div>
                             </div>
-                        )}
 
-                        {/* 消息提示区 */}
-                        {error && (
-                            <div className="text-red-400 text-xs text-center bg-red-500/10 py-2 rounded-lg border border-red-500/20 animate-pulse">
-                                {error}
+                            {/* 3. 密码输入框 */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-gray-400 ml-1">密码</label>
+                                <div className="group flex items-center w-full rounded-xl bg-[#1a1d2d]/80 border border-white/5 focus-within:border-[#2547f4]/60 focus-within:shadow-[0_0_15px_rgba(37,71,244,0.3)] transition-all duration-300">
+                                    <div className="pl-4 pr-3 text-gray-400 group-focus-within:text-[#2547f4] transition-colors">
+                                        <span className="material-symbols-outlined text-[20px]">lock</span>
+                                    </div>
+                                    <input
+                                        type={showPassword ? "text" : "password"}
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="w-full bg-transparent border-none text-white placeholder-gray-500/80 focus:ring-0 h-12 py-3 pl-0 pr-4 text-sm outline-none"
+                                        placeholder="请输入密码"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="pr-4 pl-2 text-gray-500 hover:text-white transition-colors focus:outline-none flex items-center"
+                                    >
+                                        <span className="material-symbols-outlined text-[20px]">
+                                            {showPassword ? 'visibility' : 'visibility_off'}
+                                        </span>
+                                    </button>
+                                </div>
                             </div>
-                        )}
-                        {message && (
-                            <div className="text-green-400 text-xs text-center bg-green-500/10 py-2 rounded-lg border border-green-500/20">
-                                {message}
-                            </div>
-                        )}
 
-                        {/* 提交按钮 */}
-                        <button
-                            type="submit"
-                            disabled={isLoading}
-                            className="relative w-full overflow-hidden rounded-xl group h-14 shadow-[0_4px_20px_rgba(37,71,244,0.3)] hover:shadow-[0_4px_25px_rgba(37,71,244,0.5)] transition-all duration-300 transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed mt-2"
-                        >
-                            <div className="absolute inset-0 bg-gradient-to-r from-[#2547f4] to-[#9333ea] transition-all duration-300 group-hover:scale-105"></div>
-                            <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors"></div>
-                            <span className="relative flex items-center justify-center gap-2 text-white font-bold text-base tracking-wide">
-                                {isLoading ? '处理中...' : (isRegistering ? '立即注册' : '登录')}
-                                {!isLoading && (
-                                    <span className="material-symbols-outlined text-[18px] mt-[2px]">arrow_forward</span>
-                                )}
-                            </span>
-                        </button>
-                    </form>
+                            {/* 忘记密码链接 - 仅在登录模式显示 */}
+                            {!isRegistering && (
+                                <div className="flex justify-end -mt-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsForgotPassword(true)}
+                                        className="text-xs text-gray-400 hover:text-blue-400 transition-colors"
+                                    >
+                                        忘记密码?
+                                    </button>
+                                </div>
+                            )}
 
-                    {/* 底部切换链接 */}
-                    <div className="flex justify-center items-center pt-2">
-                        <button
-                            onClick={toggleMode}
-                            className="text-sm text-gray-500 hover:text-white transition-colors"
-                        >
-                            {isRegistering ? '已有账号？' : '还没有账号？'}
-                            <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 hover:opacity-80 transition-opacity ml-1 cursor-pointer">
-                                {isRegistering ? '立即登录' : '立即免费注册'}
-                            </span>
-                        </button>
-                    </div>
+                            {/* 4. 确认密码 */}
+                            {isRegistering && (
+                                <div className="space-y-2 animate-fadeIn">
+                                    <label className="text-xs font-medium text-gray-400 ml-1">确认密码</label>
+                                    <div className="group flex items-center w-full rounded-xl bg-[#1a1d2d]/80 border border-white/5 focus-within:border-[#2547f4]/60 focus-within:shadow-[0_0_15px_rgba(37,71,244,0.3)] transition-all duration-300">
+                                        <div className="pl-4 pr-3 text-gray-400 group-focus-within:text-[#2547f4] transition-colors">
+                                            <span className="material-symbols-outlined text-[20px]">check_circle</span>
+                                        </div>
+                                        <input
+                                            type={showPassword ? "text" : "password"}
+                                            value={confirmPassword}
+                                            onChange={(e) => setConfirmPassword(e.target.value)}
+                                            className="w-full bg-transparent border-none text-white placeholder-gray-500/80 focus:ring-0 h-12 py-3 pl-0 pr-4 text-sm outline-none"
+                                            placeholder="请再次输入密码"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* 消息提示区 */}
+                            {error && (
+                                <div className="text-red-400 text-xs text-center bg-red-500/10 py-2 rounded-lg border border-red-500/20 animate-pulse">
+                                    {error}
+                                </div>
+                            )}
+                            {message && (
+                                <div className="text-green-400 text-xs text-center bg-green-500/10 py-2 rounded-lg border border-green-500/20">
+                                    {message}
+                                </div>
+                            )}
+
+                            {/* 提交按钮 */}
+                            <button
+                                type="submit"
+                                disabled={isLoading}
+                                className="relative w-full overflow-hidden rounded-xl group h-14 shadow-[0_4px_20px_rgba(37,71,244,0.3)] hover:shadow-[0_4px_25px_rgba(37,71,244,0.5)] transition-all duration-300 transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed mt-2"
+                            >
+                                <div className="absolute inset-0 bg-gradient-to-r from-[#2547f4] to-[#9333ea] transition-all duration-300 group-hover:scale-105"></div>
+                                <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors"></div>
+                                <span className="relative flex items-center justify-center gap-2 text-white font-bold text-base tracking-wide">
+                                    {isLoading ? '处理中...' : (isRegistering ? '立即注册' : '登录')}
+                                    {!isLoading && (
+                                        <span className="material-symbols-outlined text-[18px] mt-[2px]">arrow_forward</span>
+                                    )}
+                                </span>
+                            </button>
+                        </form>
+                    )}
+
+                    {/* 底部切换链接 - 不在忘记密码模式时显示 */}
+                    {!isForgotPassword && (
+                        <div className="flex justify-center items-center pt-2">
+                            <button
+                                onClick={toggleMode}
+                                className="text-sm text-gray-500 hover:text-white transition-colors"
+                            >
+                                {isRegistering ? '已有账号？' : '还没有账号？'}
+                                <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 hover:opacity-80 transition-opacity ml-1 cursor-pointer">
+                                    {isRegistering ? '立即登录' : '立即免费注册'}
+                                </span>
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

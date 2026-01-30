@@ -136,6 +136,34 @@ class AuthService {
         const response = await apiClient.get('/api/auth/me');
         return response.data;
     }
+
+    /**
+     * 发送密码重置邮件
+     * NOTE: redirectTo 必须是生产环境的完整 URL
+     */
+    async resetPasswordForEmail(email: string) {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: 'https://www.voicetwin-boke.xyz/update-password'
+        });
+
+        if (error) {
+            throw new Error(error.message);
+        }
+    }
+
+    /**
+     * 更新用户密码
+     * NOTE: 此方法需要在用户点击重置邮件链接后调用
+     */
+    async updatePassword(newPassword: string) {
+        const { error } = await supabase.auth.updateUser({
+            password: newPassword
+        });
+
+        if (error) {
+            throw new Error(error.message);
+        }
+    }
 }
 
 export default new AuthService();

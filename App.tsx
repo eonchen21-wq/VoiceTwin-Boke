@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
 import LoginView from './components/LoginView';
 import RecordingView from './components/RecordingView';
 import MatchResultView from './components/MatchResultView';
 import FavoritesView from './components/FavoritesView';
 import ProfileView from './components/ProfileView';
+import UpdatePassword from './components/UpdatePassword';
 import { AppView, AnalysisData, Song } from './types';
 import { CURRENT_USER } from './constants';
 import authService from './services/auth-service';
@@ -12,7 +14,11 @@ import songService from './services/song-service';
 import userService from './services/user-service';
 
 
-const App: React.FC = () => {
+
+// NOTE: 将原有的 App 逻辑移到 AppContent，以便在路由上下文中使用 useNavigate 和 useLocation
+const AppContent: React.FC = () => {
+    const navigate = useNavigate();
+    const location = useLocation();
     const [currentView, setCurrentView] = useState<AppView>(AppView.LOGIN);
     const [analysisResult, setAnalysisResult] = useState<AnalysisData | null>(null);
     const [favoriteSongs, setFavoriteSongs] = useState<Song[]>([]);
@@ -187,10 +193,26 @@ const App: React.FC = () => {
         }
     };
 
+    // NOTE: 如果访问 /update-password 路径，不渲染 Layout，直接显示 UpdatePassword 组件
+    if (location.pathname === '/update-password') {
+        return <UpdatePassword />;
+    }
+
     return (
         <Layout currentView={currentView} onNavigate={handleNavigation}>
             {renderView()}
         </Layout>
+    );
+};
+
+// NOTE: App 组件负责提供路由上下文
+const App: React.FC = () => {
+    return (
+        <BrowserRouter>
+            <Routes>
+                <Route path="/*" element={<AppContent />} />
+            </Routes>
+        </BrowserRouter>
     );
 };
 
