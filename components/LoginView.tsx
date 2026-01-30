@@ -16,6 +16,8 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     const [isRegistering, setIsRegistering] = useState(false);
     const [isForgotPassword, setIsForgotPassword] = useState(false);
     const [resetEmail, setResetEmail] = useState('');
+    const [showEmailConfirmation, setShowEmailConfirmation] = useState(false); // NOTE: 邮箱验证提示
+    const [registeredEmail, setRegisteredEmail] = useState(''); // NOTE: 已注册的邮箱
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -61,15 +63,31 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         try {
             if (isRegistering) {
                 await authService.register(email, password, username);
-                setMessage('注册成功！正在为您自动登录...');
-                setTimeout(() => { onLogin(); }, 1500);
+                // NOTE: 注册成功后不自动登录，显示邮箱验证提示
+                setRegisteredEmail(email);
+                setShowEmailConfirmation(true);
+                setIsRegistering(false); // 切换回登录模式
+                // 清空表单
+                setEmail('');
+                setPassword('');
+                setUsername('');
+                setConfirmPassword('');
             } else {
                 await authService.login(email, password);
                 onLogin();
             }
         } catch (err: any) {
             console.error(err);
-            setError(err.message || (isRegistering ? '注册失败，请稍后重试' : '登录失败，请检查账号密码'));
+
+            // NOTE: 检测邮箱未验证错误
+            const errorMsg = err.message || '';
+            if (errorMsg.includes('Email not confirmed') ||
+                errorMsg.includes('email_not_confirmed') ||
+                errorMsg.includes('Email link is invalid or has expired')) {
+                setError('您的账号尚未激活，请先前往邮箱点击验证链接激活账号');
+            } else {
+                setError(errorMsg || (isRegistering ? '注册失败，请稍后重试' : '登录失败，请检查账号密码'));
+            }
         } finally {
             setIsLoading(false);
         }
@@ -78,6 +96,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     const toggleMode = () => {
         setIsRegistering(!isRegistering);
         setIsForgotPassword(false);
+        setShowEmailConfirmation(false);
         setError('');
         setMessage('');
         setPassword('');
@@ -156,8 +175,51 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                         boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.36)'
                     }}
                 >
-                    {/* --- 忘记密码表单 --- */}
-                    {isForgotPassword ? (
+                    {/* --- 邮箱验证提示 --- */}
+                    {showEmailConfirmation ? (
+                        <div className="space-y-5 text-center">
+                            {/* 成功图标 */}
+                            <div className="flex justify-center">
+                                <div className="relative">
+                                    <div className="absolute inset-0 bg-green-500/20 blur-2xl rounded-full"></div>
+                                    <span className="material-symbols-outlined text-8xl text-green-400 relative" style={{ fontVariationSettings: "'FILL' 1" }}>
+                                        mark_email_read
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* 标题 */}
+                            <div className="space-y-2">
+                                <h3 className="text-2xl font-bold text-white">注册确认邮件已发送！</h3>
+                                <div className="space-y-3 text-gray-300">
+                                    <p>我们已向 <span className="font-bold text-blue-400">{registeredEmail}</span> 发送了一封验证邮件。</p>
+                                    <p className="text-sm">请前往您的邮箱点击链接激活账号，然后返回登录。</p>
+                                </div>
+                            </div>
+
+                            {/* 提示信息 */}
+                            <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 text-sm text-gray-400">
+                                <p>💡 收不到邮件？请检查垃圾邮件文件夹</p>
+                            </div>
+
+                            {/* 返回登录按钮 */}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowEmailConfirmation(false);
+                                    setRegisteredEmail('');
+                                }}
+                                className="relative w-full overflow-hidden rounded-xl group h-14 shadow-[0_4px_20px_rgba(37,71,244,0.3)] hover:shadow-[0_4px_25px_rgba(37,71,244,0.5)] transition-all duration-300 transform active:scale-[0.98] mt-4"
+                            >
+                                <div className="absolute inset-0 bg-gradient-to-r from-[#2547f4] to-[#9333ea] transition-all duration-300 group-hover:scale-105"></div>
+                                <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors"></div>
+                                <span className="relative flex items-center justify-center gap-2 text-white font-bold text-base tracking-wide">
+                                    <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                                    返回登录
+                                </span>
+                            </button>
+                        </div>
+                    ) : isForgotPassword ? (
                         <form onSubmit={handleForgotPassword} className="space-y-5">
                             {/* 邮箱输入框 */}
                             <div className="space-y-2">
@@ -349,8 +411,8 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                         </form>
                     )}
 
-                    {/* 底部切换链接 - 不在忘记密码模式时显示 */}
-                    {!isForgotPassword && (
+                    {/* 底部切换链接 - 不在忘记密码和邮箱验证模式时显示 */}
+                    {!isForgotPassword && !showEmailConfirmation && (
                         <div className="flex justify-center items-center pt-2">
                             <button
                                 onClick={toggleMode}
