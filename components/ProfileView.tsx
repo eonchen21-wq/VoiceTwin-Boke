@@ -118,58 +118,84 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                 // 获取当前用户ID
                 const userId = localStorage.getItem('user_id');
                 if (!userId) {
-                    console.warn('未找到用户ID,无法获取统计数据');
+                    console.warn('⚠️ 未找到用户ID,无法获取统计数据');
                     return;
                 }
 
+                console.log('📊 开始获取用户统计数据, userId:', userId);
+
                 // 并行查询分析次数和收藏数
                 const [analysesResult, favoritesResult, userProfile] = await Promise.all([
-                    // 查询voice_analyses表统计分析次数
+                    // 查询voice_analyses表统计分析次数 (添加throwOnError以便看到权限错误)
                     supabase
                         .from('voice_analyses')
                         .select('*', { count: 'exact', head: true })
-                        .eq('user_id', userId),
+                        .eq('user_id', userId)
+                        .throwOnError(),
 
                     // 查询user_favorites表统计收藏数
                     supabase
                         .from('user_favorites')
                         .select('*', { count: 'exact', head: true })
-                        .eq('user_id', userId),
+                        .eq('user_id', userId)
+                        .throwOnError(),
 
-                    // 获取用户资料(包含头像和昵称)
-                    authService.getMe().catch(() => null)
+                    // 获取用户资料(包含头像和昵称) - 从Supabase Auth获取
+                    supabase.auth.getUser().then(({ data, error }) => {
+                        if (error) throw error;
+                        return data.user?.user_metadata || null;
+                    }).catch(() => null)
                 ]);
 
                 // 更新分析次数
                 if (analysesResult.count !== null) {
                     setAnalysisCount(analysesResult.count);
+                    console.log('✅ 分析次数:', analysesResult.count);
+                } else {
+                    console.warn('⚠️ 未获取到分析次数');
                 }
 
                 // 更新收藏数
                 if (favoritesResult.count !== null) {
                     setSavedSongsCount(favoritesResult.count);
+                    console.log('✅ 收藏数:', favoritesResult.count);
+                } else {
+                    console.warn('⚠️ 未获取到收藏数');
                 }
 
-                // 更新用户信息
+                // 更新用户信息 (从user_metadata获取)
                 if (userProfile) {
                     if (userProfile.full_name) {
                         setUsername(userProfile.full_name);
                         setTempUsername(userProfile.full_name);
+                        console.log('✅ 昵称:', userProfile.full_name);
                     }
                     if (userProfile.avatar_url) {
                         // 添加时间戳防止缓存
                         const avatarWithTimestamp = `${userProfile.avatar_url}?t=${Date.now()}`;
                         setCurrentAvatarUrl(avatarWithTimestamp);
                         onUpdateAvatar(avatarWithTimestamp);
+                        console.log('✅ 头像已加载');
                     }
                 }
 
-                console.log('✅ 用户统计数据加载成功', {
-                    analysisCount: analysesResult.count,
-                    savedSongsCount: favoritesResult.count
-                });
-            } catch (error) {
-                console.error('获取用户统计数据失败:', error);
+                console.log('✅ 用户统计数据加载完成');
+            } catch (error: any) {
+                console.error('❌ 获取用户统计数据失败:', error);
+
+                // 详细的错误信息,帮助诊断RLS权限问题
+                if (error.code) {
+                    console.error('错误代码:', error.code);
+                }
+                if (error.message) {
+                    console.error('错误信息:', error.message);
+                }
+                if (error.details) {
+                    console.error('错误详情:', error.details);
+                }
+                if (error.hint) {
+                    console.error('错误提示:', error.hint);
+                }
             } finally {
                 setIsLoadingStats(false);
             }
@@ -211,16 +237,52 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
         fileInputRef.current?.click();
     };
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) {
+        if (!file) return;
+
+        try {
+            console.log('📤 开始上传头像...');
+
+            // 1. 读取文件为Base64 (用于前端预览)
             const reader = new FileReader();
-            reader.onloadend = () => {
+            reader.onloadend = async () => {
                 if (typeof reader.result === 'string') {
-                    onUpdateAvatar(reader.result);
+                    const base64Data = reader.result;
+
+                    try {
+                        // 2. 上传到Supabase Storage (可选,如果你有配置Storage)
+                        // 这里我们直接使用Base64存储到User Metadata
+
+                        // 3. 调用Supabase Auth更新用户头像 (关键步骤!)
+                        const { data, error } = await supabase.auth.updateUser({
+                            data: {
+                                avatar_url: base64Data  // 保存到user_metadata
+                            }
+                        });
+
+                        if (error) {
+                            throw error;
+                        }
+
+                        console.log('✅ 头像保存到Supabase成功');
+
+                        // 4. 更新前端显示 (添加时间戳防止缓存)
+                        const avatarWithTimestamp = `${base64Data}?t=${Date.now()}`;
+                        setCurrentAvatarUrl(avatarWithTimestamp);
+                        onUpdateAvatar(avatarWithTimestamp);
+
+                    } catch (error) {
+                        console.error('❌ 保存头像到Supabase失败:', error);
+                        alert('头像保存失败,请重试');
+                    }
                 }
             };
             reader.readAsDataURL(file);
+
+        } catch (error) {
+            console.error('❌ 头像上传失败:', error);
+            alert('头像上传失败,请重试');
         }
     };
 
@@ -230,20 +292,35 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
     };
 
     const handleSaveSettings = async () => {
-        if (tempUsername.trim()) {
-            try {
-                // 调用后端API更新用户信息
-                const userId = localStorage.getItem('user_id');
-                if (userId) {
-                    await authService.getMe(); // 刷新用户信息
-                    setUsername(tempUsername);
-                    console.log('✅ 用户信息更新成功');
-                }
-            } catch (error) {
-                console.error('更新用户信息失败:', error);
-            }
+        if (!tempUsername.trim()) {
+            setShowSettings(false);
+            return;
         }
-        setShowSettings(false);
+
+        try {
+            console.log('💾 开始保存用户资料...');
+
+            // 调用Supabase Auth更新用户昵称 (关键步骤!)
+            const { data, error } = await supabase.auth.updateUser({
+                data: {
+                    full_name: tempUsername.trim()  // 保存到user_metadata
+                }
+            });
+
+            if (error) {
+                throw error;
+            }
+
+            console.log('✅ 昵称保存到Supabase成功');
+
+            // 只有保存成功后才更新前端显示
+            setUsername(tempUsername.trim());
+            setShowSettings(false);
+
+        } catch (error) {
+            console.error('❌ 保存用户资料失败:', error);
+            alert('保存失败,请重试: ' + (error as Error).message);
+        }
     };
 
     const handleClearCache = () => {
