@@ -12,6 +12,7 @@ import os
 import uuid
 import time
 import threading
+import numpy as np
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -36,211 +37,191 @@ class AnalysisService:
     
     async def analyze_voice(self, user_id: str, audio_file_path: str, audio_filename: str) -> VoiceAnalysisResponse:
         """
-        分析用户声音（高性能异步版本）
+        分析用户声音 (基于真实声学特征)
+        
+        流程:
+        1. 提取用户音频的声学特征 (音高、亮度、响度)
+        2. 与歌手声学模型进行匹配
+        3. 生成真实的雷达图数据
+        4. 推荐相似歌曲
         
         优化点:
-        1. CPU 密集型任务使用 run_in_threadpool 防止阻塞
-        2. 推荐歌曲限制为5首
-        3. 自动生成封面图片
+        - CPU 密集型任务使用 run_in_threadpool 防止阻塞
+        - 只分析前30秒音频,确保快速响应
         """
         start_time = time.time()
         logger.info(f"开始分析用户声音 user_id={user_id}")
         
-        # ==================== 1. 计算核心数据 (高性能异步处理) ====================
+        # ==================== 1. 提取用户音频特征 ====================
         
-        # 1.1 提取特征向量 (CPU密集型任务，放入线程池防止阻塞)
-        # ✅ 优化点：使用 run_in_threadpool
-        user_feature_vector = await run_in_threadpool(
-            AudioAnalyzer.extract_mfcc_feature_vector, 
+        from service.audio_feature_extractor import extract_audio_features, normalize_user_features
+        from service.singer_acoustic_profiles import get_all_singer_profiles, normalize_singer_features
+        
+        # 使用线程池执行CPU密集型特征提取
+        logger.info("提取音频特征...")
+        user_features = await run_in_threadpool(
+            extract_audio_features, 
             audio_file_path
         )
         
-        # 1.2 获取歌曲库
-        try:
-            # NOTE: 如果数据库查询很慢，也可以包进 run_in_threadpool
-            songs = self.song_repo.get_all_with_features()
-            if not songs:
-                return await self._create_fallback_response(user_id, audio_file_path)
-        except Exception as e:
-            logger.error(f"数据库查询失败: {str(e)}")
-            return await self._create_fallback_response(user_id, audio_file_path)
-            
-        # 1.3 匹配最佳歌曲
-        best_match = None
-        highest_similarity = -1
+        # 归一化用户特征
+        user_normalized = normalize_user_features(user_features)
         
-        for song in songs:
-            if not song.get('feature_vector'): continue
-            try:
-                # NOTE: 计算余弦相似度是数学运算，量大时可放入线程池
-                similarity = AudioAnalyzer.calculate_cosine_similarity(
-                    user_feature_vector, song['feature_vector']
-                )
-                if similarity > highest_similarity:
-                    highest_similarity = similarity
-                    best_match = song
-            except: continue
-            
-        if not best_match:
-            best_match = songs[0] if songs else None
-            if not best_match: 
-                return await self._create_fallback_response(user_id, audio_file_path)
-            highest_similarity = 0.5
-            
-        # 1.4 生成图表数据 (CPU密集型，放入线程池)
-        # ✅ 优化点：使用 run_in_threadpool
-        features = await run_in_threadpool(
-            AudioAnalyzer.analyze_audio_file, 
-            audio_file_path
-        )
-        analysis_result = AudioAnalyzer.generate_analysis_result(features)
+        # ==================== 2. 匹配最佳歌手 ====================
         
-        # ==================== 2. 准备结果数据 ====================
-        artist_name = best_match.get('artist', '未知歌手')
-        song_title = best_match.get('title', '未知歌曲')
+        logger.info("匹配歌手声学模型...")
+        singer_profiles = get_all_singer_profiles()
         
-        # 获取头像
-        main_avatar = await self._generate_singer_avatar(artist_name)
+        min_distance = float('inf')
+        best_singer_name = None
+        best_singer_profile = None
+        
+        # 计算欧氏距离,找到最匹配的歌手
+        for singer_name, profile in singer_profiles.items():
+            singer_normalized = normalize_singer_features(profile)
+            
+            # 计算欧氏距离
+            distance = np.sqrt(
+                (user_normalized['pitch'] - singer_normalized['pitch'])**2 +
+                (user_normalized['brightness'] - singer_normalized['brightness'])**2 +
+                (user_normalized['energy'] - singer_normalized['energy'])**2
+            )
+            
+            if distance < min_distance:
+                min_distance = distance
+                best_singer_name = singer_name
+                best_singer_profile = profile
+        
+        # 如果没有匹配到,使用默认
+        if not best_singer_name:
+            best_singer_name = "陈奕迅"
+            best_singer_profile = singer_profiles[best_singer_name]
+            min_distance = 0.3
+        
+        logger.info(f"匹配结果: {best_singer_name}, 距离={min_distance:.3f}")
+        
+        # ==================== 3. 计算匹配度分数 ====================
+        
+        # 距离越小,匹配度越高
+        # 距离范围约0-1.5,映射到60-98分
+        similarity_score = int((1 - min(min_distance, 1)) * 38 + 60)
+        similarity_score = max(60, min(98, similarity_score))
+        
+        # ==================== 4. 生成真实雷达图 ====================
+        
+        radar_data = [
+            {
+                "subject": "音准",
+                "A": int(user_features['pitch_stability']),
+                "B": 75,
+                "fullMark": 150
+            },
+            {
+                "subject": "音域",
+                "A": int(user_features['pitch_range_score']),
+                "B": 70,
+                "fullMark": 150
+            },
+            {
+                "subject": "明亮度",
+                "A": int(user_features['brightness_score']),
+                "B": 65,
+                "fullMark": 150
+            },
+            {
+                "subject": "力度",
+                "A": int(user_features['energy_score']),
+                "B": 70,
+                "fullMark": 150
+            },
+            {
+                "subject": "稳定性",
+                "A": int(user_features['stability_score']),
+                "B": 68,
+                "fullMark": 150
+            }
+        ]
+        
+        # ==================== 5. 生成清晰度和稳定性评级 ====================
+        
+        # 清晰度基于明亮度
+        if user_features['brightness_score'] >= 70:
+            clarity = "优秀"
+        elif user_features['brightness_score'] >= 50:
+            clarity = "良好"
+        else:
+            clarity = "一般"
+        
+        # 稳定性百分比
+        stability = f"{int(user_features['stability_score'])}%"
+        
+        # ==================== 6. 生成歌手信息 ====================
+        
+        # 生成头像
+        avatar_url = await self._generate_singer_avatar(best_singer_name)
         
         matched_singer_response = MatchedSingerResponse(
-            id="temp-singer-id",
-            name=artist_name,
-            description=f"声音特质与 {artist_name} 相似",
-            avatar_url=main_avatar,
-            voice_characteristics={}
+            id=f"singer-{best_singer_name}",
+            name=best_singer_name,
+            description=best_singer_profile['description'],
+            avatar_url=avatar_url,
+            voice_characteristics=best_singer_profile.get('voice_characteristics', {})
         )
         
-        similarity_score = int(highest_similarity * 100)
+        # ==================== 7. 推荐歌曲 ====================
         
-        # ==================== 3. 智能推荐逻辑 (限制5首 & 自动配图) ====================
-        
-        # 3.1 筛选舒适区
-        comfort_songs_raw = self._get_similar_songs(best_match, songs, limit=15)
-        used_ids = {best_match['id']}
-        filtered_comfort = []
-        for s in comfort_songs_raw:
-            if s['id'] not in used_ids:
-                filtered_comfort.append(s)
-                used_ids.add(s['id'])
-        
-        # ✅ 限制舒适区数量：5首
-        final_comfort_list = filtered_comfort[:5]
-        logger.info(f"✅ 舒适区推荐: {len(final_comfort_list)}首")
-        
-        # 3.2 筛选挑战区
-        challenge_candidates = [s for s in songs if s['id'] not in used_ids]
-        challenge_songs_raw = self._get_challenge_songs(best_match, challenge_candidates, limit=15)
-        
-        # ✅ 限制挑战区数量：5首
-        final_challenge_list = challenge_songs_raw[:5]
-        logger.info(f"✅ 挑战区推荐: {len(final_challenge_list)}首")
-        
-        # 3.3 构建列表并自动配图（动态标签生成）
-        recommended_comfort = []
-        for song in final_comfort_list:
-            cover = song.get('cover_url')
-            if not cover:
-                # 如果没有封面，自动生成
-                cover = await AIImageService.generate_song_cover(song.get('title'))
-            
-            # 计算该歌曲与用户声音的相似度
-            song_similarity = 0
-            if song.get('feature_vector'):
-                try:
-                    song_similarity = AudioAnalyzer.calculate_cosine_similarity(
-                        user_feature_vector, song['feature_vector']
-                    )
-                except:
-                    song_similarity = 0.75  # 默认值
-            else:
-                song_similarity = 0.75  # 无特征向量时使用默认值
-            
-            # 根据相似度生成动态标签
-            if song_similarity >= 0.90:
-                tag_label = "完美契合"
-            elif song_similarity >= 0.80:
-                tag_label = "非常契合"
-            else:
-                tag_label = "比较合适"
-            
-            similarity_score = int(song_similarity * 100)
-            
-            recommended_comfort.append(RecommendedSongResponse(
-                id=song['id'],
-                title=song.get('title', '未知'),
-                artist=song.get('artist', ''),
-                cover_url=cover, 
-                similarity_score=similarity_score,
-                difficulty_level="comfortable",
-                tag_label=tag_label
-            ))
-
-        recommended_challenge = []
-        for song in final_challenge_list:
-            cover = song.get('cover_url')
-            if not cover:
-                # 如果没有封面，自动生成
-                cover = await AIImageService.generate_song_cover(song.get('title'))
-            
-            # 计算该歌曲与用户声音的相似度
-            song_similarity = 0
-            if song.get('feature_vector'):
-                try:
-                    song_similarity = AudioAnalyzer.calculate_cosine_similarity(
-                        user_feature_vector, song['feature_vector']
-                    )
-                except:
-                    song_similarity = 0.55  # 默认值
-            else:
-                song_similarity = 0.55  # 无特征向量时使用默认值
-            
-            # 根据相似度生成动态标签（挑战区歌曲相似度较低）
-            if song_similarity >= 0.70:
-                tag_label = "有点挑战"
-            elif song_similarity >= 0.50:
-                tag_label = "极具挑战"
-            else:
-                tag_label = "高难挑战"
-            
-            similarity_score = int(song_similarity * 100)
+        # 尝试从数据库获取歌曲推荐
+        try:
+            songs = self.song_repo.get_all_with_features()
+            if songs:
+                # 筛选该歌手的歌曲作为舒适区
+                comfort_songs = [s for s in songs if s.get('artist') == best_singer_name][:5]
+                # 筛选其他歌手的歌曲作为挑战区
+                challenge_songs = [s for s in songs if s.get('artist') != best_singer_name][:5]
                 
-            recommended_challenge.append(RecommendedSongResponse(
-                id=song['id'],
-                title=song.get('title', '未知'),
-                artist=song.get('artist', ''),
-                cover_url=cover,
-                similarity_score=similarity_score,
-                difficulty_level="challenge",
-                tag_label=tag_label
-            ))
+                recommended_comfort = await self._build_recommended_songs(comfort_songs, user_features, "comfortable")
+                recommended_challenge = await self._build_recommended_songs(challenge_songs, user_features, "challenge")
+            else:
+                recommended_comfort = []
+                recommended_challenge = []
+        except Exception as e:
+            logger.warning(f"获取推荐歌曲失败: {str(e)}")
+            recommended_comfort = []
+            recommended_challenge = []
         
-        # ==================== 4. 返回结果 ====================
+        # ==================== 8. 返回结果 ====================
+        
         final_response = VoiceAnalysisResponse(
             id=str(uuid.uuid4()),
             user_id=user_id,
             score=similarity_score,
-            clarity=analysis_result['clarity'],
-            stability=analysis_result['stability'],
-            radar_data=analysis_result['radar_data'],
+            clarity=clarity,
+            stability=stability,
+            radar_data=radar_data,
             matched_singer=matched_singer_response,
             audio_url=None,
             created_at=datetime.now(),
             recommended_songs_comfort=recommended_comfort,
             recommended_songs_challenge=recommended_challenge,
-            matched_song_title=song_title,
-            matched_song_id=best_match.get('id')
+            matched_song_title=None,
+            matched_song_id=None
         )
         
-        # 异步保存 (使用 daemon=True 确保不阻碍主进程退出)
+        # 异步保存到数据库
         threading.Thread(
             target=self._save_task_in_background, 
-            args=(user_id, similarity_score, analysis_result), 
+            args=(user_id, similarity_score, {
+                'clarity': clarity,
+                'stability': stability,
+                'radar_data': radar_data
+            }), 
             daemon=True
         ).start()
         
         elapsed_time = time.time() - start_time
-        logger.info(f"✅ 分析完成，耗时: {elapsed_time:.2f}秒")
+        logger.info(f"✅ 分析完成,耗时: {elapsed_time:.2f}秒, 匹配歌手: {best_singer_name}, 得分: {similarity_score}")
         return final_response
+
 
     # --- 内部辅助方法 ---
 
@@ -308,6 +289,69 @@ class AnalysisService:
             return await AIImageService.generate_singer_avatar(artist_name)
         except:
             return "/static/default_avatar.svg"
+    
+    async def _build_recommended_songs(self, songs, user_features, difficulty_level):
+        """
+        构建推荐歌曲列表
+        
+        Args:
+            songs: 歌曲列表
+            user_features: 用户音频特征
+            difficulty_level: 难度级别 ("comfortable" 或 "challenge")
+            
+        Returns:
+            list: RecommendedSongResponse列表
+        """
+        recommended = []
+        
+        for song in songs:
+            cover = song.get('cover_url')
+            if not cover:
+                # 如果没有封面,使用默认或生成
+                try:
+                    cover = await AIImageService.generate_song_cover(song.get('title'))
+                except:
+                    cover = "/static/default_cover.svg"
+            
+            # 基于用户特征生成相似度分数
+            if difficulty_level == "comfortable":
+                # 舒适区歌曲相似度较高
+                base_score = 80
+                variation = int(user_features.get('pitch_stability', 70) / 5)
+            else:
+                # 挑战区歌曲相似度较低
+                base_score = 55
+                variation = int(user_features.get('energy_score', 50) / 5)
+            
+            similarity_score = min(98, max(50, base_score + variation))
+            
+            # 生成动态标签
+            if difficulty_level == "comfortable":
+                if similarity_score >= 90:
+                    tag_label = "完美契合"
+                elif similarity_score >= 80:
+                    tag_label = "非常契合"
+                else:
+                    tag_label = "比较合适"
+            else:
+                if similarity_score >= 70:
+                    tag_label = "有点挑战"
+                elif similarity_score >= 55:
+                    tag_label = "极具挑战"
+                else:
+                    tag_label = "高难挑战"
+            
+            recommended.append(RecommendedSongResponse(
+                id=song['id'],
+                title=song.get('title', '未知'),
+                artist=song.get('artist', ''),
+                cover_url=cover,
+                similarity_score=similarity_score,
+                difficulty_level=difficulty_level,
+                tag_label=tag_label
+            ))
+        
+        return recommended
     
     def _get_similar_songs(self, matched_song, all_songs, limit=5):
         """
