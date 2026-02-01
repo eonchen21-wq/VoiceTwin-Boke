@@ -111,22 +111,39 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
 
     // 实时获取用户统计数据
     useEffect(() => {
-        const fetchUserStats = async () => {
+        const loadUserData = async () => {
             try {
-                setIsLoadingStats(true);
+                // 1. 优先从Supabase Auth获取用户信息 (避免闪烁)
+                const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-                // 获取当前用户ID
-                const userId = localStorage.getItem('user_id');
-                if (!userId) {
-                    console.warn('⚠️ 未找到用户ID,无法获取统计数据');
+                if (userError || !user) {
+                    console.warn('⚠️ 未找到登录用户');
                     return;
                 }
 
-                console.log('📊 开始获取用户统计数据, userId:', userId);
+                const userId = user.id;
+                console.log('📊 开始加载用户数据, userId:', userId);
 
-                // 并行查询分析次数和收藏数
-                const [analysesResult, favoritesResult, userProfile] = await Promise.all([
-                    // 查询voice_analyses表统计分析次数 (添加throwOnError以便看到权限错误)
+                // 2. 立即显示user_metadata中的昵称和头像 (避免闪烁)
+                if (user.user_metadata) {
+                    if (user.user_metadata.full_name) {
+                        setUsername(user.user_metadata.full_name);
+                        setTempUsername(user.user_metadata.full_name);
+                        console.log('✅ 昵称(缓存):', user.user_metadata.full_name);
+                    }
+                    if (user.user_metadata.avatar_url) {
+                        const avatarWithTimestamp = `${user.user_metadata.avatar_url}?t=${Date.now()}`;
+                        setCurrentAvatarUrl(avatarWithTimestamp);
+                        onUpdateAvatar(avatarWithTimestamp);
+                        console.log('✅ 头像(缓存)已加载');
+                    }
+                }
+
+                // 3. 后台静默查询最新的统计数据
+                setIsLoadingStats(true);
+
+                const [analysesResult, favoritesResult] = await Promise.all([
+                    // 查询voice_analyses表统计分析次数
                     supabase
                         .from('voice_analyses')
                         .select('*', { count: 'exact', head: true })
@@ -138,16 +155,10 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                         .from('user_favorites')
                         .select('*', { count: 'exact', head: true })
                         .eq('user_id', userId)
-                        .throwOnError(),
-
-                    // 获取用户资料(包含头像和昵称) - 从Supabase Auth获取
-                    supabase.auth.getUser().then(({ data, error }) => {
-                        if (error) throw error;
-                        return data.user?.user_metadata || null;
-                    }).catch(() => null)
+                        .throwOnError()
                 ]);
 
-                // 更新分析次数
+                // 4. 平滑更新统计数据
                 if (analysesResult.count !== null) {
                     setAnalysisCount(analysesResult.count);
                     console.log('✅ 分析次数:', analysesResult.count);
@@ -155,7 +166,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                     console.warn('⚠️ 未获取到分析次数');
                 }
 
-                // 更新收藏数
                 if (favoritesResult.count !== null) {
                     setSavedSongsCount(favoritesResult.count);
                     console.log('✅ 收藏数:', favoritesResult.count);
@@ -163,25 +173,10 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                     console.warn('⚠️ 未获取到收藏数');
                 }
 
-                // 更新用户信息 (从user_metadata获取)
-                if (userProfile) {
-                    if (userProfile.full_name) {
-                        setUsername(userProfile.full_name);
-                        setTempUsername(userProfile.full_name);
-                        console.log('✅ 昵称:', userProfile.full_name);
-                    }
-                    if (userProfile.avatar_url) {
-                        // 添加时间戳防止缓存
-                        const avatarWithTimestamp = `${userProfile.avatar_url}?t=${Date.now()}`;
-                        setCurrentAvatarUrl(avatarWithTimestamp);
-                        onUpdateAvatar(avatarWithTimestamp);
-                        console.log('✅ 头像已加载');
-                    }
-                }
+                console.log('✅ 用户数据加载完成');
 
-                console.log('✅ 用户统计数据加载完成');
             } catch (error: any) {
-                console.error('❌ 获取用户统计数据失败:', error);
+                console.error('❌ 加载用户数据失败:', error);
 
                 // 详细的错误信息,帮助诊断RLS权限问题
                 if (error.code) {
@@ -201,8 +196,8 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
             }
         };
 
-        // 组件挂载时获取数据
-        fetchUserStats();
+        // 组件挂载时加载数据
+        loadUserData();
     }, []); // 空依赖数组,只在组件挂载时执行一次
 
     // 监听avatarUrl prop变化,同步更新本地状态
