@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 def extract_audio_features(file_path: str) -> Dict[str, Any]:
     """
-    提取音频文件的声学特征
+    提取音频文件的声学特征 (性能优化版)
     
     Args:
         file_path: 音频文件路径
@@ -27,37 +27,49 @@ def extract_audio_features(file_path: str) -> Dict[str, Any]:
     Returns:
         dict: 包含所有提取特征的字典
         
-    NOTE: 性能优化 - 只读取前30秒,采样率22050Hz
+    NOTE: 性能优化措施
+    - 只读取前10秒 (从30秒缩短)
+    - 采样率16000Hz (从22050Hz降低)
+    - 使用piptrack替代pyin (速度提升10-20倍)
     """
     try:
-        # 1. 加载音频 (只读取前30秒以提高性能)
+        # 1. 加载音频 (性能优化: 10秒, 16kHz)
         logger.info(f"开始加载音频文件: {file_path}")
-        y, sr = librosa.load(file_path, sr=22050, duration=30)
+        y, sr = librosa.load(file_path, sr=16000, duration=10)
         logger.info(f"音频加载成功: 采样率={sr}, 时长={len(y)/sr:.2f}秒")
         
-        # 2. 提取音高特征 (F0)
+        # 2. 提取音高特征 (使用piptrack替代pyin,速度快10-20倍)
         logger.info("提取音高特征...")
-        f0, voiced_flag, voiced_probs = librosa.pyin(
-            y,
-            fmin=librosa.note_to_hz('C2'),  # 约65Hz
-            fmax=librosa.note_to_hz('C7'),  # 约2093Hz
-            sr=sr
+        
+        # 使用piptrack进行快速音高估算
+        pitches, magnitudes = librosa.piptrack(
+            y=y, 
+            sr=sr,
+            fmin=60,   # 人声最低频率
+            fmax=500,  # 人声最高频率
+            threshold=0.1
         )
         
-        # 过滤掉NaN值
-        f0_valid = f0[~np.isnan(f0)]
+        # 提取每帧的主导音高
+        pitch_values = []
+        for t in range(pitches.shape[1]):
+            index = magnitudes[:, t].argmax()
+            pitch = pitches[index, t]
+            if pitch > 0:  # 过滤掉0值
+                pitch_values.append(pitch)
         
-        if len(f0_valid) == 0:
+        if len(pitch_values) == 0:
             logger.warning("未检测到有效音高,使用默认值")
             pitch_mean = 200  # 默认中音
             pitch_std = 40
             pitch_min = 150
             pitch_max = 250
         else:
-            pitch_mean = float(np.mean(f0_valid))
-            pitch_std = float(np.std(f0_valid))
-            pitch_min = float(np.min(f0_valid))
-            pitch_max = float(np.max(f0_valid))
+            pitch_values = np.array(pitch_values)
+            pitch_mean = float(np.mean(pitch_values))
+            pitch_std = float(np.std(pitch_values))
+            pitch_min = float(np.min(pitch_values))
+            pitch_max = float(np.max(pitch_values))
         
         # 3. 提取音色亮度 (Spectral Centroid)
         logger.info("提取音色亮度...")
@@ -151,8 +163,8 @@ def _get_default_features() -> Dict[str, Any]:
         'brightness_score': 50,
         'energy_score': 50,
         'stability_score': 60,
-        'sample_rate': 22050,
-        'duration': 30
+        'sample_rate': 16000,
+        'duration': 10
     }
 
 

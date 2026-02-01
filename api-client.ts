@@ -10,7 +10,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://voicetwin-bok
  */
 const apiClient: AxiosInstance = axios.create({
     baseURL: API_BASE_URL,
-    timeout: 120000, // NOTE: 音频分析是 CPU 密集型操作（特征提取+相似度计算），设置 120 秒超时
+    timeout: 300000, // NOTE: 音频分析是 CPU 密集型操作,设置 300 秒超时作为兜底 (优化后预计 15 秒内完成)
     headers: {
         'Content-Type': 'application/json'
     }
