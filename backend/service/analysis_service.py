@@ -55,7 +55,7 @@ class AnalysisService:
         # ==================== 1. 提取用户音频特征 ====================
         
         from service.audio_feature_extractor import extract_audio_features, normalize_user_features
-        from service.singer_acoustic_profiles import get_all_singer_profiles, normalize_singer_features
+        from service.singer_acoustic_profiles import get_all_singer_profiles, normalize_singer_features, get_singer_id
         
         # 使用线程池执行CPU密集型特征提取
         logger.info("提取音频特征...")
@@ -210,7 +210,7 @@ class AnalysisService:
         # 异步保存到数据库
         threading.Thread(
             target=self._save_task_in_background, 
-            args=(user_id, similarity_score, {
+            args=(user_id, best_singer_name, similarity_score, {
                 'clarity': clarity,
                 'stability': stability,
                 'radar_data': radar_data
@@ -225,26 +225,44 @@ class AnalysisService:
 
     # --- 内部辅助方法 ---
 
-    def _save_task_in_background(self, user_id, similarity_score, analysis_result):
+    def _save_task_in_background(self, user_id, singer_name, similarity_score, analysis_result):
         """
-        后台保存任务（在独立线程中运行）
+        后台保存任务(在独立线程中运行)
         
-        FIXME: 建议后续重构为 FastAPI BackgroundTasks
+        Args:
+            user_id: 用户ID
+            singer_name: 匹配的歌手名称
+            similarity_score: 匹配分数
+            analysis_result: 分析结果数据
         """
         try:
+            from service.singer_acoustic_profiles import get_singer_id
+            
+            # ✅ 获取歌手数据库ID (1-10)
+            matched_singer_id = get_singer_id(singer_name)
+            
+            # ✅ 安全检查: 确保ID在有效范围内
+            if matched_singer_id < 1 or matched_singer_id > 10:
+                logger.error(f"❌ 歌手ID异常: {matched_singer_id}, 强制修正为5")
+                matched_singer_id = 5
+            
+            logger.info(f"💾 准备保存分析结果: user_id={user_id}, singer_name={singer_name}, singer_id={matched_singer_id}")
+            
             analysis_data = {
                 'user_id': user_id,
                 'score': similarity_score,
                 'clarity': analysis_result['clarity'],
                 'stability': analysis_result['stability'],
                 'radar_data': analysis_result['radar_data'],
-                'matched_singer_id': 'default-singer',
+                'matched_singer_id': matched_singer_id,  # ✅ 使用正确的数据库ID
                 'audio_url': None
             }
+            
             self.analysis_repo.create(analysis_data)
-            logger.info("✅ [后台任务] 数据保存成功")
+            logger.info(f"✅ [后台任务] 数据保存成功, singer_id={matched_singer_id}")
         except Exception as e:
-            logger.warning(f"⚠️ [后台任务] 保存失败: {e}")
+            logger.error(f"❌ [后台任务] 保存失败: {e}")
+            logger.exception(e)  # 打印完整堆栈
 
     async def _create_fallback_response(self, user_id, audio_file_path):
         """

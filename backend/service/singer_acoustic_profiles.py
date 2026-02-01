@@ -142,6 +142,57 @@ SINGER_PROFILES = {
     }
 }
 
+# ✅ 歌手名称到数据库ID的映射 (严格对齐数据库singers表)
+# NOTE: 这些ID必须与Supabase singers表中的ID完全一致
+SINGER_NAME_TO_ID = {
+    "邓紫棋": 1,
+    "张杰": 2,
+    "王菲": 3,
+    "林俊杰": 4,
+    "陈奕迅": 5,
+    "李荣浩": 6,
+    "周杰伦": 7,
+    "伍佰": 8,
+    "薛之谦": 9,
+    "孙燕姿": 10
+}
+
+# ✅ ID到歌手名称的反向映射
+SINGER_ID_TO_NAME = {v: k for k, v in SINGER_NAME_TO_ID.items()}
+
+
+def get_singer_id(singer_name: str) -> int:
+    """
+    根据歌手名称获取数据库ID
+    
+    Args:
+        singer_name: 歌手名称
+        
+    Returns:
+        int: 数据库ID (1-10),如果不存在返回5(陈奕迅作为默认)
+    """
+    singer_id = SINGER_NAME_TO_ID.get(singer_name, 5)  # 默认返回5(陈奕迅)
+    
+    # 安全检查: 确保ID在1-10范围内
+    if singer_id < 1 or singer_id > 10:
+        logger.warning(f"⚠️ 歌手ID异常: {singer_id}, 强制修正为5")
+        singer_id = 5
+    
+    return singer_id
+
+
+def get_singer_name(singer_id: int) -> str:
+    """
+    根据数据库ID获取歌手名称
+    
+    Args:
+        singer_id: 数据库ID
+        
+    Returns:
+        str: 歌手名称,如果不存在返回"陈奕迅"
+    """
+    return SINGER_ID_TO_NAME.get(singer_id, "陈奕迅")
+
 
 def get_all_singer_profiles():
     """

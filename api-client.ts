@@ -47,33 +47,36 @@ apiClient.interceptors.response.use(
         if (error.response) {
             // 服务器返回错误响应
             const status = error.response.status;
+            const errorData = error.response.data as any;
 
             switch (status) {
                 case 401:
-                    // 未授权，清除 token 并跳转登录
+                    // 未授权,清除 token 并跳转登录
                     localStorage.removeItem('auth_token');
-                    console.error('认证失败，请重新登录');
+                    console.error('❌ 认证失败,请重新登录');
                     break;
                 case 403:
-                    console.error('无权限访问');
+                    // ✅ 权限错误必须明确抛出
+                    console.error('❌ 无权限访问:', errorData?.message || '权限不足');
                     break;
                 case 404:
-                    console.error('请求的资源不存在');
+                    console.error('❌ 请求的资源不存在');
                     break;
                 case 500:
-                    console.error('服务器错误');
+                    console.error('❌ 服务器错误:', errorData?.message || '内部错误');
                     break;
                 default:
-                    console.error(`请求失败: ${status}`);
+                    console.error(`❌ 请求失败 (${status}):`, errorData?.message || error.message);
             }
         } else if (error.request) {
             // 请求已发送但没有收到响应
-            console.error('网络错误，请检查网络连接');
+            console.error('❌ 网络错误,请检查网络连接');
         } else {
             // 其他错误
-            console.error('请求配置错误');
+            console.error('❌ 请求配置错误:', error.message);
         }
 
+        // ✅ 确保错误被抛出,不让UI假装成功
         return Promise.reject(error);
     }
 );
