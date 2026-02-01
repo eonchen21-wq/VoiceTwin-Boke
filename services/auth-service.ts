@@ -81,6 +81,24 @@ class AuthService {
             throw new Error('登录失败');
         }
 
+        // NOTE: 检测并清理异常的avatar_url (防止Base64导致Session过大)
+        const avatarUrl = data.user.user_metadata?.avatar_url;
+        if (avatarUrl && avatarUrl.length > 500) {
+            console.warn('⚠️ 检测到异常的avatar_url (长度超过500字符),自动清理...');
+
+            try {
+                // 清空异常的avatar_url
+                await supabase.auth.updateUser({
+                    data: {
+                        avatar_url: ''  // 清空异常数据
+                    }
+                });
+                console.log('✅ 已清理异常的avatar_url');
+            } catch (cleanError) {
+                console.error('清理avatar_url失败:', cleanError);
+            }
+        }
+
         // NOTE: 保存真实的 JWT token 确保安全性
         if (data.session?.access_token) {
             localStorage.setItem('auth_token', data.session.access_token);

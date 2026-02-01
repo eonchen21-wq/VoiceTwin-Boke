@@ -241,48 +241,88 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
         const file = e.target.files?.[0];
         if (!file) return;
 
+        // 验证文件类型
+        if (!file.type.startsWith('image/')) {
+            alert('请上传图片文件');
+            return;
+        }
+
+        // 验证文件大小 (限制5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            alert('图片大小不能超过5MB');
+            return;
+        }
+
         try {
-            console.log('📤 开始上传头像...');
+            console.log('📤 开始上传头像到Supabase Storage...');
 
-            // 1. 读取文件为Base64 (用于前端预览)
-            const reader = new FileReader();
-            reader.onloadend = async () => {
-                if (typeof reader.result === 'string') {
-                    const base64Data = reader.result;
+            // 获取当前用户ID
+            const userId = localStorage.getItem('user_id');
+            if (!userId) {
+                throw new Error('未找到用户ID');
+            }
 
-                    try {
-                        // 2. 上传到Supabase Storage (可选,如果你有配置Storage)
-                        // 这里我们直接使用Base64存储到User Metadata
+            // 1. 生成唯一文件名 (使用时间戳避免重复)
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${userId}_${Date.now()}.${fileExt}`;
+            const filePath = `avatars/${fileName}`;
 
-                        // 3. 调用Supabase Auth更新用户头像 (关键步骤!)
-                        const { data, error } = await supabase.auth.updateUser({
-                            data: {
-                                avatar_url: base64Data  // 保存到user_metadata
-                            }
-                        });
+            // 2. 上传到Supabase Storage
+            const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('avatars')  // bucket名称
+                .upload(filePath, file, {
+                    cacheControl: '3600',
+                    upsert: true  // 如果文件已存在则覆盖
+                });
 
-                        if (error) {
-                            throw error;
-                        }
+            if (uploadError) {
+                throw uploadError;
+            }
 
-                        console.log('✅ 头像保存到Supabase成功');
+            console.log('✅ 文件上传成功:', uploadData.path);
 
-                        // 4. 更新前端显示 (添加时间戳防止缓存)
-                        const avatarWithTimestamp = `${base64Data}?t=${Date.now()}`;
-                        setCurrentAvatarUrl(avatarWithTimestamp);
-                        onUpdateAvatar(avatarWithTimestamp);
+            // 3. 获取公开URL
+            const { data: urlData } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(filePath);
 
-                    } catch (error) {
-                        console.error('❌ 保存头像到Supabase失败:', error);
-                        alert('头像保存失败,请重试');
-                    }
+            const publicUrl = urlData.publicUrl;
+            console.log('✅ 获取公开URL:', publicUrl);
+
+            // 验证URL长度 (必须是短URL,不是Base64)
+            if (publicUrl.length > 500) {
+                throw new Error('URL异常,长度超过500字符');
+            }
+
+            // 4. 更新用户资料 (只存储publicUrl,不是Base64!)
+            const { error: updateError } = await supabase.auth.updateUser({
+                data: {
+                    avatar_url: publicUrl  // 只存储短URL
                 }
-            };
-            reader.readAsDataURL(file);
+            });
 
-        } catch (error) {
+            if (updateError) {
+                throw updateError;
+            }
+
+            console.log('✅ 头像URL保存到Supabase成功');
+
+            // 5. 更新前端显示 (添加时间戳防止缓存)
+            const avatarWithTimestamp = `${publicUrl}?t=${Date.now()}`;
+            setCurrentAvatarUrl(avatarWithTimestamp);
+            onUpdateAvatar(avatarWithTimestamp);
+
+            alert('头像上传成功!');
+
+        } catch (error: any) {
             console.error('❌ 头像上传失败:', error);
-            alert('头像上传失败,请重试');
+
+            // 详细错误信息
+            if (error.message) {
+                alert(`头像上传失败: ${error.message}`);
+            } else {
+                alert('头像上传失败,请重试');
+            }
         }
     };
 
