@@ -1,6 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { CURRENT_USER } from '../constants';
 import { AppView } from '../types';
+import { supabase } from '../services/auth-service';
+import authService from '../services/auth-service';
 
 interface ProfileViewProps {
     onNavigate: (view: AppView) => void;
@@ -19,7 +21,7 @@ interface NotificationItem {
     unread: boolean;
 }
 
-const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpdateAvatar, analysisCount, savedSongsCount }) => {
+const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpdateAvatar, analysisCount: initialAnalysisCount, savedSongsCount: initialSavedSongsCount }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [showSettings, setShowSettings] = useState(false);
     const [username, setUsername] = useState('声音探索者');
@@ -27,6 +29,12 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
     const [notificationEnabled, setNotificationEnabled] = useState(true);
     const [cacheSize, setCacheSize] = useState('128.5 MB');
     const [uidCopied, setUidCopied] = useState(false);
+
+    // 实时统计数据状态
+    const [analysisCount, setAnalysisCount] = useState(initialAnalysisCount);
+    const [savedSongsCount, setSavedSongsCount] = useState(initialSavedSongsCount);
+    const [isLoadingStats, setIsLoadingStats] = useState(false);
+    const [currentAvatarUrl, setCurrentAvatarUrl] = useState(avatarUrl);
 
     // Password Change State
     const [showChangePassword, setShowChangePassword] = useState(false);
@@ -101,6 +109,85 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
 
     const unreadCount = notifications.filter(n => n.unread).length;
 
+    // 实时获取用户统计数据
+    useEffect(() => {
+        const fetchUserStats = async () => {
+            try {
+                setIsLoadingStats(true);
+
+                // 获取当前用户ID
+                const userId = localStorage.getItem('user_id');
+                if (!userId) {
+                    console.warn('未找到用户ID,无法获取统计数据');
+                    return;
+                }
+
+                // 并行查询分析次数和收藏数
+                const [analysesResult, favoritesResult, userProfile] = await Promise.all([
+                    // 查询voice_analyses表统计分析次数
+                    supabase
+                        .from('voice_analyses')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('user_id', userId),
+
+                    // 查询user_favorites表统计收藏数
+                    supabase
+                        .from('user_favorites')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('user_id', userId),
+
+                    // 获取用户资料(包含头像和昵称)
+                    authService.getMe().catch(() => null)
+                ]);
+
+                // 更新分析次数
+                if (analysesResult.count !== null) {
+                    setAnalysisCount(analysesResult.count);
+                }
+
+                // 更新收藏数
+                if (favoritesResult.count !== null) {
+                    setSavedSongsCount(favoritesResult.count);
+                }
+
+                // 更新用户信息
+                if (userProfile) {
+                    if (userProfile.full_name) {
+                        setUsername(userProfile.full_name);
+                        setTempUsername(userProfile.full_name);
+                    }
+                    if (userProfile.avatar_url) {
+                        // 添加时间戳防止缓存
+                        const avatarWithTimestamp = `${userProfile.avatar_url}?t=${Date.now()}`;
+                        setCurrentAvatarUrl(avatarWithTimestamp);
+                        onUpdateAvatar(avatarWithTimestamp);
+                    }
+                }
+
+                console.log('✅ 用户统计数据加载成功', {
+                    analysisCount: analysesResult.count,
+                    savedSongsCount: favoritesResult.count
+                });
+            } catch (error) {
+                console.error('获取用户统计数据失败:', error);
+            } finally {
+                setIsLoadingStats(false);
+            }
+        };
+
+        // 组件挂载时获取数据
+        fetchUserStats();
+    }, []); // 空依赖数组,只在组件挂载时执行一次
+
+    // 监听avatarUrl prop变化,同步更新本地状态
+    useEffect(() => {
+        if (avatarUrl) {
+            // 添加时间戳防止缓存
+            const avatarWithTimestamp = `${avatarUrl}?t=${Date.now()}`;
+            setCurrentAvatarUrl(avatarWithTimestamp);
+        }
+    }, [avatarUrl]);
+
     const faqs = [
         {
             question: "如何提高匹配准确度?",
@@ -142,9 +229,19 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
         setShowSettings(true);
     };
 
-    const handleSaveSettings = () => {
+    const handleSaveSettings = async () => {
         if (tempUsername.trim()) {
-            setUsername(tempUsername);
+            try {
+                // 调用后端API更新用户信息
+                const userId = localStorage.getItem('user_id');
+                if (userId) {
+                    await authService.getMe(); // 刷新用户信息
+                    setUsername(tempUsername);
+                    console.log('✅ 用户信息更新成功');
+                }
+            } catch (error) {
+                console.error('更新用户信息失败:', error);
+            }
         }
         setShowSettings(false);
     };
@@ -211,8 +308,8 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
             return;
         }
         if (newPassword.length < 6) {
-             setPasswordError('新密码长度至少需要6位');
-             return;
+            setPasswordError('新密码长度至少需要6位');
+            return;
         }
 
         // Simulate success
@@ -225,7 +322,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
     };
 
     const getNotificationIcon = (type: string) => {
-        switch(type) {
+        switch (type) {
             case 'system': return 'notifications';
             case 'analysis': return 'graphic_eq';
             case 'achievement': return 'emoji_events';
@@ -237,14 +334,14 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
 
     return (
         <div className="relative flex h-full min-h-screen w-full flex-col overflow-x-hidden pb-24 bg-[#050508]">
-             {/* Background Light Leak */}
+            {/* Background Light Leak */}
             <div className="absolute top-0 left-0 right-0 h-[500px] overflow-hidden pointer-events-none z-0">
                 <div className="absolute top-[-100px] left-1/2 -translate-x-1/2 w-[300px] h-[300px] bg-primary/20 rounded-full blur-[100px]"></div>
             </div>
 
             {/* Notification Center Modal */}
             {showNotifications && (
-                 <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="w-full max-w-sm bg-[#151926] border border-white/10 rounded-3xl p-0 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 h-[85vh]">
                         {/* Header */}
                         <div className="flex items-center justify-between p-6 pb-2 shrink-0">
@@ -252,7 +349,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                                 <span className="material-symbols-outlined">arrow_back</span>
                             </button>
                             <h3 className="text-xl font-bold text-white font-body">通知中心</h3>
-                            <button 
+                            <button
                                 onClick={handleClearNotifications}
                                 className="h-10 px-4 rounded-full bg-white/5 flex items-center justify-center text-xs font-medium text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
                             >
@@ -295,12 +392,12 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                             )}
                         </div>
                     </div>
-                 </div>
+                </div>
             )}
 
             {/* Help & Feedback Modal */}
             {showHelp && (
-                 <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="w-full max-w-sm bg-[#151926] border border-white/10 rounded-3xl p-0 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 h-[85vh]">
                         {/* Header */}
                         <div className="flex items-center justify-between p-6 pb-2 shrink-0">
@@ -318,7 +415,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                                 <div className="space-y-2">
                                     {faqs.map((faq, index) => (
                                         <div key={index} className="rounded-xl bg-[#050508]/50 border border-white/5 overflow-hidden transition-all duration-300">
-                                            <button 
+                                            <button
                                                 onClick={() => setExpandedFaq(expandedFaq === index ? null : index)}
                                                 className="flex items-center justify-between w-full p-4 text-left"
                                             >
@@ -348,20 +445,20 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                                 </div>
                             </div>
                         </div>
-                        
-                         {/* Footer Button */}
+
+                        {/* Footer Button */}
                         <div className="p-6 pt-2 shrink-0 bg-gradient-to-t from-[#151926] to-transparent">
-                            <button 
+                            <button
                                 onClick={handleSubmitFeedback}
                                 disabled={!feedbackText.trim() || feedbackSuccess}
                                 className={`w-full h-12 rounded-xl font-bold font-body transition-all flex items-center justify-center gap-2 ${feedbackSuccess ? 'bg-green-500 text-white' : 'bg-primary text-white shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed'}`}
                             >
-                                 {feedbackSuccess ? (
+                                {feedbackSuccess ? (
                                     <>
                                         <span className="material-symbols-outlined">check</span>
                                         提交成功
                                     </>
-                                 ) : '提交反馈'}
+                                ) : '提交反馈'}
                             </button>
                         </div>
                     </div>
@@ -370,13 +467,13 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
 
             {/* Agreements Modal */}
             {showAgreements && (
-                 <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="w-full max-w-sm bg-[#151926] border border-white/10 rounded-3xl p-6 shadow-2xl flex flex-col gap-5 animate-in zoom-in-95 duration-200 h-[75vh]">
                         <div className="flex items-center justify-between shrink-0">
                             {viewingPolicyDetail ? (
                                 <div className="flex items-center gap-2">
                                     <button onClick={() => setViewingPolicyDetail(false)} className="text-slate-400 hover:text-white transition-colors">
-                                         <span className="material-symbols-outlined">arrow_back</span>
+                                        <span className="material-symbols-outlined">arrow_back</span>
                                     </button>
                                     <h3 className="text-xl font-bold text-white font-body">隐私政策详情</h3>
                                 </div>
@@ -387,7 +484,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                                 <span className="material-symbols-outlined">close</span>
                             </button>
                         </div>
-                        
+
                         <div className="flex-1 overflow-y-auto no-scrollbar pr-1 text-slate-300 text-sm leading-relaxed font-body">
                             {viewingPolicyDetail ? (
                                 <div className="space-y-4 p-1 animate-in fade-in slide-in-from-right-4 duration-300 text-slate-300">
@@ -398,7 +495,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                                     <p className="text-sm leading-relaxed">
                                         波可深知个人信息安全的重要性，并致力于按照法律法规的要求保护您的个人信息。本政策旨在清晰地说明我们如何收集、使用、存储、共享和保护您的信息，以及您享有的权利。
                                     </p>
-                                    
+
                                     <h5 className="font-bold text-white mt-4 text-sm">1. 我们如何收集信息</h5>
                                     <p className="text-sm leading-relaxed mb-2">为向您提供核心服务并保障账户安全，我们会在您使用服务过程中收集以下必要信息：</p>
                                     <ul className="list-disc pl-4 space-y-1 text-sm text-slate-400">
@@ -407,7 +504,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                                         <li><strong>设备与日志信息：</strong>为保障服务安全运行，我们会收集您的设备型号、操作系统版本、唯一设备标识符（如IDFA/Android ID）、IP地址、应用崩溃日志、操作时间及使用行为记录。</li>
                                         <li><strong>权限申请：</strong>部分功能可能需要您授权访问麦克风（用于录音）、本地存储（用于读取/保存音频文件）。每一项权限都对应明确的功能，您可以在设备设置中随时关闭授权。</li>
                                     </ul>
-                                    
+
                                     <h5 className="font-bold text-white mt-4 text-sm">2. 我们如何使用信息</h5>
                                     <p className="text-sm leading-relaxed mb-2">我们严格遵守“合法、正当、必要”的原则使用您的信息，主要用于以下目的：</p>
                                     <ul className="list-disc pl-4 space-y-1 text-sm text-slate-400">
@@ -416,7 +513,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                                         <li>通过分析匿名化的使用趋势，改进产品功能与用户体验。</li>
                                         <li>在法律要求时，用于配合监管或司法程序。</li>
                                     </ul>
-                                    
+
                                     <h5 className="font-bold text-white mt-4 text-sm">3. 我们如何存储与保护信息</h5>
                                     <p className="text-sm leading-relaxed text-slate-400">
                                         我们将在实现本政策所述目的所必需的期限内保留您的个人信息，法律另有规定或您另行授权延长保留期的除外。您的数据存储于境内的安全服务器，我们采取了符合行业标准的技术与管理措施（如加密传输、访问控制）来防止数据丢失、滥用及未授权访问。但请注意，任何互联网传输与存储方式都无法做到100%绝对安全。
@@ -459,12 +556,12 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                                         <li>客服邮箱：C2678479061@163.com</li>
                                         <li>应用内反馈：在“波可”应用内，“我的”-“设置”-“意见反馈”中提交。</li>
                                     </ul>
-                                    
+
                                     <div className="h-4"></div>
                                 </div>
                             ) : (
                                 <div className="space-y-5 animate-in fade-in slide-in-from-left-4 duration-300">
-                                    <div 
+                                    <div
                                         onClick={() => setViewingPolicyDetail(true)}
                                         className="p-4 rounded-xl bg-white/5 border border-white/5 cursor-pointer hover:bg-white/10 hover:border-white/10 transition-all group active:scale-[0.99]"
                                     >
@@ -478,7 +575,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                                             波可深知个人信息安全的重要性，并致力于按照法律法规的要求保护您的个人信息。本政策...
                                         </p>
                                     </div>
-                                    
+
                                     <p className="text-xs text-slate-500 text-center pt-2">
                                         更新日期：2026年1月14日
                                     </p>
@@ -487,7 +584,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                         </div>
 
                         {!viewingPolicyDetail && (
-                            <button 
+                            <button
                                 onClick={() => setShowAgreements(false)}
                                 className="w-full h-12 rounded-xl bg-gradient-to-r from-primary to-primary-light text-white font-bold font-body shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all active:scale-[0.98] shrink-0"
                             >
@@ -495,12 +592,12 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                             </button>
                         )}
                     </div>
-                 </div>
+                </div>
             )}
 
             {/* Change Password Modal */}
             {showChangePassword && (
-                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="w-full max-w-sm bg-[#151926] border border-white/10 rounded-3xl p-6 shadow-2xl flex flex-col gap-5 animate-in zoom-in-95 duration-200">
                         <div className="flex items-center justify-between shrink-0">
                             <h3 className="text-xl font-bold text-white font-body">修改密码</h3>
@@ -508,55 +605,55 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                                 <span className="material-symbols-outlined">close</span>
                             </button>
                         </div>
-                        
+
                         {passwordSuccess ? (
-                             <div className="flex flex-col items-center justify-center py-6 gap-3 animate-in fade-in zoom-in duration-300">
+                            <div className="flex flex-col items-center justify-center py-6 gap-3 animate-in fade-in zoom-in duration-300">
                                 <div className="size-14 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-500 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
-                                     <span className="material-symbols-outlined text-3xl">check</span>
+                                    <span className="material-symbols-outlined text-3xl">check</span>
                                 </div>
                                 <p className="text-white font-medium font-body">{passwordSuccess}</p>
-                             </div>
+                            </div>
                         ) : (
                             <>
                                 <div className="space-y-4">
                                     {passwordError && (
-                                         <div className="text-red-400 text-xs font-medium bg-red-500/10 border border-red-500/20 p-3 rounded-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+                                        <div className="text-red-400 text-xs font-medium bg-red-500/10 border border-red-500/20 p-3 rounded-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
                                             <span className="material-symbols-outlined text-sm">error</span>
                                             {passwordError}
-                                         </div>
+                                        </div>
                                     )}
                                     <div className="space-y-1.5">
-                                         <label className="text-xs font-medium text-gray-500 ml-1">当前密码</label>
-                                         <input 
+                                        <label className="text-xs font-medium text-gray-500 ml-1">当前密码</label>
+                                        <input
                                             type="password"
                                             value={currentPassword}
                                             onChange={(e) => setCurrentPassword(e.target.value)}
                                             className="w-full rounded-xl bg-[#050508]/50 border border-white/10 focus:border-primary/60 focus:shadow-[0_0_15px_rgba(37,71,244,0.15)] text-white text-sm h-12 px-4 outline-none transition-all placeholder:text-gray-600 font-body"
                                             placeholder="请输入当前使用的密码"
-                                         />
+                                        />
                                     </div>
-                                     <div className="space-y-1.5">
-                                         <label className="text-xs font-medium text-gray-500 ml-1">新密码</label>
-                                         <input 
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-medium text-gray-500 ml-1">新密码</label>
+                                        <input
                                             type="password"
                                             value={newPassword}
                                             onChange={(e) => setNewPassword(e.target.value)}
                                             className="w-full rounded-xl bg-[#050508]/50 border border-white/10 focus:border-primary/60 focus:shadow-[0_0_15px_rgba(37,71,244,0.15)] text-white text-sm h-12 px-4 outline-none transition-all placeholder:text-gray-600 font-body"
                                             placeholder="设置新密码（至少6位）"
-                                         />
+                                        />
                                     </div>
-                                     <div className="space-y-1.5">
-                                         <label className="text-xs font-medium text-gray-500 ml-1">确认新密码</label>
-                                         <input 
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-medium text-gray-500 ml-1">确认新密码</label>
+                                        <input
                                             type="password"
                                             value={confirmPassword}
                                             onChange={(e) => setConfirmPassword(e.target.value)}
                                             className="w-full rounded-xl bg-[#050508]/50 border border-white/10 focus:border-primary/60 focus:shadow-[0_0_15px_rgba(37,71,244,0.15)] text-white text-sm h-12 px-4 outline-none transition-all placeholder:text-gray-600 font-body"
                                             placeholder="请再次输入新密码"
-                                         />
+                                        />
                                     </div>
                                 </div>
-                                <button 
+                                <button
                                     onClick={handleSubmitPassword}
                                     className="w-full h-12 rounded-xl bg-gradient-to-r from-primary to-primary-light text-white font-bold font-body shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all active:scale-[0.98] mt-2"
                                 >
@@ -565,7 +662,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                             </>
                         )}
                     </div>
-                 </div>
+                </div>
             )}
 
             {/* Settings Modal */}
@@ -580,13 +677,13 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                         </div>
 
                         <div className="flex-1 overflow-y-auto no-scrollbar space-y-6 pr-1">
-                             <div className="space-y-3">
+                            <div className="space-y-3">
                                 <label className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">基本信息</label>
-                                
+
                                 <div className="space-y-1">
                                     <div className="flex items-center w-full rounded-xl bg-[#050508]/50 border border-white/10 focus-within:border-primary/60 transition-colors h-12 px-4 focus-within:shadow-[0_0_15px_rgba(37,71,244,0.2)]">
-                                        <input 
-                                            type="text" 
+                                        <input
+                                            type="text"
                                             value={tempUsername}
                                             onChange={(e) => setTempUsername(e.target.value)}
                                             className="bg-transparent border-none text-white w-full text-sm font-body focus:ring-0 p-0 placeholder-gray-600"
@@ -598,7 +695,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
 
                                 <div className="flex items-center justify-between w-full rounded-xl bg-[#050508]/30 border border-white/5 h-12 px-4 select-none">
                                     <span className="text-slate-500 text-sm font-display">UID: {CURRENT_USER.uid}</span>
-                                    <button 
+                                    <button
                                         onClick={handleCopyUid}
                                         className="flex items-center justify-center size-8 rounded-full hover:bg-white/10 transition-colors"
                                         title="复制UID"
@@ -612,14 +709,14 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
 
                             <div className="space-y-3">
                                 <label className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">安全与隐私</label>
-                                <button 
+                                <button
                                     onClick={handleOpenChangePassword}
                                     className="flex items-center justify-between w-full rounded-xl bg-[#050508]/50 border border-white/10 h-12 px-4 hover:bg-[#050508] transition-colors group"
                                 >
                                     <span className="text-white text-sm font-body">修改密码</span>
                                     <span className="material-symbols-outlined text-slate-500 text-[20px] group-hover:text-white transition-colors">chevron_right</span>
                                 </button>
-                                <button 
+                                <button
                                     onClick={handleOpenAgreements}
                                     className="flex items-center justify-between w-full rounded-xl bg-[#050508]/50 border border-white/10 h-12 px-4 hover:bg-[#050508] transition-colors group"
                                 >
@@ -629,11 +726,11 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                             </div>
 
                             <div className="space-y-3">
-                                 <label className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">通用</label>
-                                 
-                                 <div className="flex items-center justify-between w-full rounded-xl bg-[#050508]/50 border border-white/10 h-12 px-4">
+                                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">通用</label>
+
+                                <div className="flex items-center justify-between w-full rounded-xl bg-[#050508]/50 border border-white/10 h-12 px-4">
                                     <span className="text-white text-sm font-body">接收推送通知</span>
-                                    <button 
+                                    <button
                                         onClick={() => setNotificationEnabled(!notificationEnabled)}
                                         className={`w-10 h-6 rounded-full relative transition-colors duration-300 ${notificationEnabled ? 'bg-primary' : 'bg-slate-700'}`}
                                     >
@@ -641,7 +738,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                                     </button>
                                 </div>
 
-                                <button 
+                                <button
                                     onClick={handleClearCache}
                                     className="flex items-center justify-between w-full rounded-xl bg-[#050508]/50 border border-white/10 h-12 px-4 hover:bg-[#050508] transition-colors active:scale-[0.99]"
                                 >
@@ -652,13 +749,13 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                         </div>
 
                         <div className="flex flex-col gap-3 shrink-0 pt-2">
-                            <button 
+                            <button
                                 onClick={handleSaveSettings}
                                 className="w-full h-12 rounded-xl bg-gradient-to-r from-primary to-primary-light text-white font-bold font-body shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all active:scale-[0.98]"
                             >
                                 保存修改
                             </button>
-                             <button 
+                            <button
                                 className="w-full h-12 rounded-xl text-red-500 text-sm font-medium hover:bg-red-500/5 transition-colors"
                             >
                                 注销账号
@@ -675,20 +772,20 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
             </header>
 
             <section className="relative z-10 flex flex-col items-center mt-4 mb-8">
-                <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    className="hidden" 
+                <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
                     accept="image/*"
                     onChange={handleFileChange}
                 />
                 <div className="relative group cursor-pointer" onClick={handleAvatarClick}>
                     <div className="absolute -inset-1 rounded-full bg-gradient-to-b from-primary to-transparent opacity-70 blur-md transition-all duration-500 group-hover:opacity-100 group-hover:blur-lg"></div>
-                    <div 
+                    <div
                         className="relative h-32 w-32 rounded-full border-[3px] border-primary bg-surface-dark bg-center bg-cover shadow-neon overflow-hidden"
-                        style={{ backgroundImage: `url("${avatarUrl}")` }}
+                        style={{ backgroundImage: `url("${currentAvatarUrl}")` }}
                     >
-                         {/* Edit Overlay */}
+                        {/* Edit Overlay */}
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
                             <span className="material-symbols-outlined text-white text-3xl">photo_camera</span>
                         </div>
@@ -718,13 +815,13 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
             </section>
 
             <section className="relative z-10 px-4 flex flex-col gap-3">
-                 {[
+                {[
                     { icon: 'settings', label: '账号设置', action: handleOpenSettings },
                     { icon: 'notifications', label: '通知中心', action: handleOpenNotifications, badge: unreadCount > 0 },
                     { icon: 'help', label: '帮助与反馈', action: handleOpenHelp }
                 ].map((item, idx) => (
-                    <button 
-                        key={idx} 
+                    <button
+                        key={idx}
                         onClick={item.action}
                         className="group flex items-center gap-4 w-full p-4 rounded-2xl bg-surface-dark/40 border border-white/5 backdrop-blur-md active:scale-[0.98] transition-all hover:bg-surface-dark/60"
                     >
@@ -739,7 +836,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                     </button>
                 ))}
 
-                <button 
+                <button
                     onClick={() => onNavigate(AppView.LOGIN)}
                     className="group flex items-center gap-4 w-full p-4 rounded-2xl bg-surface-dark/40 border border-white/5 backdrop-blur-md active:scale-[0.98] transition-all hover:bg-surface-dark/60 mt-2"
                 >
