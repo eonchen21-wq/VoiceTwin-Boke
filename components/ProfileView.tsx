@@ -162,15 +162,23 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onNavigate, avatarUrl, onUpda
                 if (analysesResult.count !== null) {
                     setAnalysisCount(analysesResult.count);
                     console.log('✅ 分析次数:', analysesResult.count);
+                    // NOTE: 如果返回 0，打印 userId 帮助诊断
+                    if (analysesResult.count === 0) {
+                        console.warn('⚠️ 分析次数为 0，确认 userId 是否正确:', userId);
+                    }
                 } else {
-                    console.warn('⚠️ 未获取到分析次数');
+                    console.warn('⚠️ 未获取到分析次数, userId:', userId);
                 }
 
                 if (favoritesResult.count !== null) {
                     setSavedSongsCount(favoritesResult.count);
                     console.log('✅ 收藏数:', favoritesResult.count);
+                    // NOTE: 如果返回 0，打印 userId 帮助诊断
+                    if (favoritesResult.count === 0) {
+                        console.warn('⚠️ 收藏数为 0，确认 userId 是否正确:', userId);
+                    }
                 } else {
-                    console.warn('⚠️ 未获取到收藏数');
+                    console.warn('⚠️ 未获取到收藏数, userId:', userId);
                 }
 
                 console.log('✅ 用户数据加载完成');

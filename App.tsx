@@ -88,10 +88,25 @@ const AppContent: React.FC = () => {
         }
     };
 
-    const handleAnalysisComplete = (data: AnalysisData) => {
+    const handleAnalysisComplete = async (data: AnalysisData) => {
         setAnalysisResult(data);
-        setAnalysisCount(prev => prev + 1);
         setCurrentView(AppView.RESULT);
+
+        // NOTE: 分析完成后强制从数据库刷新统计数据，确保数据已入库
+        try {
+            const userId = localStorage.getItem('user_id');
+            if (userId) {
+                const stats = await userService.getUserStats(userId);
+                if (stats) {
+                    setAnalysisCount(stats.analysisCount);
+                    logger.info(`✅ 分析统计已刷新: ${stats.analysisCount}`);
+                }
+            }
+        } catch (error) {
+            console.error('❌ 刷新分析统计失败:', error);
+            // 刷新失败时使用本地递增作为 fallback
+            setAnalysisCount(prev => prev + 1);
+        }
     };
 
     const handleRetake = () => {
@@ -100,25 +115,59 @@ const AppContent: React.FC = () => {
     };
 
     const handleToggleFavorite = async (song: Song) => {
+        // NOTE: 保存当前状态用于失败时回滚
+        const previousFavorites = [...favoriteSongs];
+        const isCurrentlyFavorited = favoriteSongs.some(s => s.id === song.id);
+
+        // NOTE: 乐观更新 - 立即更新 UI 提供即时反馈
+        setFavoriteSongs(prev => {
+            if (isCurrentlyFavorited) {
+                return prev.filter(s => s.id !== song.id);
+            } else {
+                return [...prev, song];
+            }
+        });
+
         try {
             // NOTE: 调用后端 API 切换收藏状态
             const result = await songService.toggleFavorite(song.id);
 
-            // 根据后端返回结果更新前端状态
-            setFavoriteSongs(prev => {
-                if (result.isFavorited) {
-                    // 添加到收藏
-                    return prev.some(s => s.id === song.id) ? prev : [...prev, song];
-                } else {
-                    // 从收藏中移除
-                    return prev.filter(s => s.id !== song.id);
-                }
-            });
+            // 验证后端返回状态与预期一致
+            const expectedFavorited = !isCurrentlyFavorited;
+            if (result.isFavorited !== expectedFavorited) {
+                // 后端状态与预期不符，使用后端的真实状态
+                setFavoriteSongs(prev => {
+                    if (result.isFavorited) {
+                        return prev.some(s => s.id === song.id) ? prev : [...prev, song];
+                    } else {
+                        return prev.filter(s => s.id !== song.id);
+                    }
+                });
+            }
 
             logger.info(`收藏状态更新: ${song.title} - ${result.isFavorited ? '已收藏' : '已取消'}`);
-        } catch (error) {
-            console.error('切换收藏状态失败:', error);
-            // TODO: 可以显示错误提示给用户
+        } catch (error: any) {
+            // 请求失败，回滚到之前的状态
+            setFavoriteSongs(previousFavorites);
+
+            // 生成用户友好的错误信息
+            let errorMessage = '收藏操作失败，请稍后重试';
+            if (error.response) {
+                const status = error.response.status;
+                if (status === 401) {
+                    errorMessage = '登录已过期，请重新登录';
+                } else if (status === 500) {
+                    errorMessage = '服务器错误，请稍后重试';
+                } else if (status === 404) {
+                    errorMessage = '歌曲不存在';
+                }
+            } else if (error.message?.includes('Network')) {
+                errorMessage = '网络连接失败，请检查网络';
+            }
+
+            console.error('❌ 切换收藏状态失败:', error);
+            // 弹出错误提示，不欺骗用户
+            alert(errorMessage);
         }
     };
 
